@@ -20,87 +20,96 @@
     Wrap ImageMagick calls.  Yes, this is ugly.
 """
 
-import subprocess
-import sys, os
+# import sys
 import logging
-import glob
-import functools
-import signal
+import os
+import subprocess
+# import glob
+# import functools
+# import signal
 
 from multiprocessing import Pool
 from .pypdfocr_interrupts import init_worker
 
-# Ugly hack to pass in object method to the multiprocessing library
-# From http://www.rueckstiess.net/research/snippets/show/ca1d7d90
-# Basically gets passed in a pair of (self, arg), and calls the method
-def unwrap_self(arg, **kwarg):
-    return PyPreprocess._run_preprocess(*arg, **kwarg)
 
+def unwrap_self(arg, **kwarg):
+    """
+    Ugly hack to pass in object method to the multiprocessing library
+    From http://www.rueckstiess.net/research/snippets/show/ca1d7d90
+    Basically gets passed in a pair of (self, arg), and calls the method
+    """
+    return PyPreprocess._run_preprocess(*arg, **kwarg)
 
 
 class PyPreprocess(object):
     """Class to wrap all the ImageMagick convert calls"""
     def __init__(self, config):
         self.msgs = {
-                'CV_FAILED': 'convert execution failed',
-            }
+            'CV_FAILED': 'convert execution failed', }
         self.threads = config.get('threads', 4)
 
-    def _warn(self, msg): # pragma: no cover
+    @staticmethod
+    def _warn(msg): # pragma: no cover
+        """Print `msg` as warning message"""
         print("WARNING: %s" % msg)
 
     def cmd(self, cmd_list):
+        """Run command as subprocess and return output."""
         if isinstance(cmd_list, list):
             cmd_list = ' '.join(cmd_list)
-        logging.debug("Running cmd: %s" % cmd_list)
+        logging.debug("Running cmd: %s", cmd_list)
         try:
-            out = subprocess.check_output(cmd_list, stderr=subprocess.STDOUT, shell=True)
+            out = subprocess.check_output(
+                cmd_list, stderr=subprocess.STDOUT, shell=True)
             logging.debug(out)
             return out
-        except subprocess.CalledProcessError as e:
-            print(e.output)
+        except subprocess.CalledProcessError as err:
+            print(err.output)
             self._warn("Could not run command %s" % cmd_list)
-            
 
-    def _run_preprocess(self,  in_filename):
+    def _run_preprocess(self, in_filename):
         basename, filext = os.path.splitext(in_filename)
         out_filename = '%s_preprocess%s' % (basename, filext)
-        #-respect-parenthesis \( -clone 0 -colorspace gray -negate -lat 15x5+5% -contrast-stretch 0 \) -compose copy_opacity -composite -opaque none +matte -modulate 100,50 -adaptive-blur 2.0 -sharpen 0x1 
-        # When using Windows, can't use backslash parenthesis in the shell, so omit the backslash
+        # When using Windows, can't use backslash parenthesis in the shell
         if str(os.name) == 'nt':
             backslash = ''
         else:
             backslash = '\\'
 
-        c = ['convert',
-                '"%s"' % in_filename,
-                '-respect-parenthesis',
-                #'\\( $setcspace -colorspace gray -type grayscale \\)',
-                backslash+'(',
-                '-clone 0',
-                '-colorspace gray -negate -lat 15x15+5% -contrast-stretch 0',
-                backslash+') -compose copy_opacity -composite -opaque none +matte -modulate 100,100',
-                #'-adaptive-blur 1.0',
-                '-blur 1x1',
-                #'-selective-blur 4x4+5%',
-                '-adaptive-sharpen 0x2',
-                '-negate -define morphology:compose=darken -morphology Thinning Rectangle:1x30+0+0 -negate ',  # Removes vertical lines >=60 pixes, reduces widht of >30 (oherwise tesseract < 3.03 completely ignores text close to vertical lines in a table)
-                '"%s"' % (out_filename)
-                ]
-        logging.info("Preprocessing image %s for better OCR" % in_filename)
-        res = self.cmd(c)
+        cmd_list = [
+            'convert',
+            '"%s"' % in_filename,
+            '-respect-parenthesis',
+            #'\\( $setcspace -colorspace gray -type grayscale \\)',
+            backslash + '(',
+            '-clone 0',
+            '-colorspace gray -negate -lat 15x15+5% -contrast-stretch 0',
+            backslash + ') -compose copy_opacity -composite -opaque none +matte -modulate 100,100',
+            #'-adaptive-blur 1.0',
+            '-blur 1x1',
+            #'-selective-blur 4x4+5%',
+            '-adaptive-sharpen 0x2',
+            '-negate -define morphology:compose=darken '
+            '-morphology Thinning Rectangle:1x30+0+0 -negate ',
+            # Removes vertical lines >=60 pixes, reduces width of >30
+            # (otherwise tesseract < 3.03 completely ignores text close to
+            # vertical lines in a table)
+            '"%s"' % (out_filename)
+            ]
+        logging.info("Preprocessing image %s for better OCR", in_filename)
+        res = self.cmd(cmd_list)
         if res is None:
             return in_filename
-        else:
-            return out_filename
+        return out_filename
 
     def preprocess(self, in_filenames):
+        """Preprocess multiple files."""
         fns = in_filenames
 
         pool = Pool(processes=self.threads, initializer=init_worker)
         try:
             logging.info("Starting preprocessing parallel execution")
-            preprocessed_filenames = pool.map(unwrap_self,zip([self]*len(fns),fns))
+            preprocessed_filenames = pool.map(unwrap_self, zip([self]*len(fns), fns))
             pool.close()
         except (KeyboardInterrupt, Exception):
             print("Caught keyboard interrupt... terminating")
@@ -112,7 +121,3 @@ class PyPreprocess(object):
             logging.info("Completed preprocessing")
 
         return preprocessed_filenames
-
-
-
-

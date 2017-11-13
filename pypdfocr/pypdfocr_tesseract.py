@@ -16,48 +16,56 @@
 
 
 """
-   Run Tesseract to generate hocr file 
+   Run Tesseract to generate hocr file
 """
 
-import os, sys
 import logging
+import os
 import subprocess
-import glob
-from pkg_resources import parse_version
-from subprocess import CalledProcessError
+import sys
+# import glob
+# from subprocess import CalledProcessError
 
 from multiprocessing import Pool
+from pkg_resources import parse_version
 from .pypdfocr_interrupts import init_worker
 
+
 def error(text):
+    """Print `text` as error and terminate process."""
     print("ERROR: %s" % text)
     sys.exit(-1)
 
-# Ugly hack to pass in object method to the multiprocessing library
-# From http://www.rueckstiess.net/research/snippets/show/ca1d7d90
-# Basically gets passed in a pair of (self, arg), and calls the method
+
 def unwrap_self(arg, **kwarg):
+    """
+    Ugly hack to pass in object method to the multiprocessing library
+    From http://www.rueckstiess.net/research/snippets/show/ca1d7d90
+    Basically gets passed in a pair of (self, arg), and calls the method
+    """
     return PyTesseract.make_hocr_from_pnm(*arg, **kwarg)
+
 
 class PyTesseract(object):
     """Class to wrap all the tesseract calls"""
     def __init__(self, config):
         """
-           Detect windows tesseract location.  
+           Detect windows tesseract location.
         """
         self.lang = 'eng'
         self.required = "3.02.02"
-        self.threads = config.get('threads',4)
+        self.threads = config.get('threads', 4)
 
         if "binary" in config:  # Override location of binary
             binary = config['binary']
             if os.name == 'nt':
                 binary = '"%s"' % binary
                 binary = binary.replace("\\", "\\\\")
-            logging.info("Setting location for tesseracdt executable to %s" % (binary))
+            logging.info("Setting location for tesseracdt executable to %s", binary)
         else:
             if str(os.name) == 'nt':
-                # Explicit str here to get around some MagicMock stuff for testing that I don't quite understand
+                # Explicit str here to get around some MagicMock stuff for
+                # testing that I don't quite understand.
                 binary = '"c:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe"'
             else:
                 binary = "tesseract"
@@ -65,7 +73,7 @@ class PyTesseract(object):
         self.binary = binary
 
         self.msgs = {
-            'TS_MISSING': """ 
+            'TS_MISSING': """
                 Could not execute %s
                 Please make sure you have Tesseract installed correctly
                 """ % self.binary,
@@ -77,15 +85,15 @@ class PyTesseract(object):
 
     def _is_version_uptodate(self):
         """
-            Make sure the version is current 
+            Make sure the version is current.
         """
         logging.info("Checking tesseract version")
         cmd = "%s -v" % self.binary
-        logging.info(cmd)        
+        logging.info(cmd)
         try:
             ret_output = subprocess.check_output(
                 cmd, shell=True, stderr=subprocess.STDOUT, universal_newlines=True)
-        except CalledProcessError:
+        except subprocess.CalledProcessError:
             # Could not run tesseract
             error(self.msgs['TS_MISSING'])
 
@@ -94,7 +102,7 @@ class PyTesseract(object):
             print(line)
             if 'tesseract' in line:
                 ver_str = line.split(' ')[1]
-        # Aargh, in windows 3.02.02 is reported as version 3.02  
+        # Aargh, in windows 3.02.02 is reported as version 3.02.
         if str(os.name) == 'nt':
             req = self.required[:-3]
         else:
@@ -102,17 +110,18 @@ class PyTesseract(object):
         print(ver_str)
         return (parse_version(ver_str) >= parse_version(req)), ver_str
 
-    def _warn(self, msg): # pragma: no cover
+    @staticmethod
+    def _warn(msg): # pragma: no cover
+        """Print `msg` as warning message."""
         print("WARNING: %s" % msg)
 
 
     def make_hocr_from_pnms(self, fns):
-        uptodate,ver =  self._is_version_uptodate()
+        """Run OCR on multiple files."""
+        uptodate, ver = self._is_version_uptodate()
         if not uptodate:
-            error(self.msgs['TS_VERSION']+ " (found %s, required %s)" % (ver, self.required))
+            error(self.msgs['TS_VERSION'] + " (found %s, required %s)" % (ver, self.required))
 
-        # Glob it
-        #fns = glob.glob(img_filename)
         logging.debug("Making pool for tesseract")
         pool = Pool(processes=self.threads, initializer=init_worker)
 
@@ -126,37 +135,37 @@ class PyTesseract(object):
         finally:
             pool.join()
 
-        return list(zip(fns,hocr_filenames))
+        return list(zip(fns, hocr_filenames))
 
 
     def make_hocr_from_pnm(self, img_filename):
-
-        basename,filext = os.path.splitext(img_filename)
+        """Run OCR on single file."""
+        basename = os.path.splitext(img_filename)[0]
         hocr_filename = "%s.html" % basename
 
         if not os.path.exists(img_filename):
             error(self.msgs['TS_img_MISSING'] + " %s" % (img_filename))
 
-        logging.info("Running OCR on %s to create %s.html" % (img_filename, basename))
-        cmd = '%s "%s" "%s" -psm 1 -c hocr_font_info=1 -l %s hocr' % (self.binary, img_filename, basename, self.lang)
+        logging.info("Running OCR on %s to create %s.html", img_filename, basename)
+        cmd = '%s "%s" "%s" -psm 1 -c hocr_font_info=1 -l %s hocr' % (
+            self.binary, img_filename, basename, self.lang)
         logging.info(cmd)
         try:
-            ret_output = subprocess.check_output(cmd, shell=True,  stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
+            subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as err:
             # Could not run tesseract
-            print(e.output)
-            self._warn (self.msgs['TS_FAILED'])
-                
+            print(err.output)
+            self._warn(self.msgs['TS_FAILED'])
+
         if os.path.isfile(hocr_filename):
             # Output format is html for old versions of tesseract
-            logging.info("Created %s.html" % basename)
+            logging.info("Created %s.html", basename)
             return hocr_filename
         else:
             # Try changing extension to .hocr for tesseract 3.03 and higher
             hocr_filename = "%s.hocr" % basename
             if os.path.isfile(hocr_filename):
-                logging.info("Created %s.hocr" % basename)
+                logging.info("Created %s.hocr", basename)
                 return hocr_filename
             else:
                 error(self.msgs['TS_FAILED'])
-            

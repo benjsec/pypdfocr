@@ -13,40 +13,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import os
 import time
 """
     Various utility classes
 """
 
 class Retry(object):
-
-    def __init__ (self, func, tries=3, pause=1):
+    """Class to wrap function allowing for multiple attempts before failure
+    """
+    def __init__(self, func, tries=3, pause=1):
         self.func = func
         self.tries = tries
         self.pause = pause
-       
+
     def call_with_retry(self):
         tries = self.tries
-       
+
         val = None
         while tries > 0:
             try:
                 val = self.func()
                 tries = 0
-            except Exception as e:
+            except Exception as err:
                 logging.exception("intermediate failure")
-                logging.info("Retrying (tries left %d)" % (tries-1))
+                logging.info("Retrying (tries left %d)", tries-1)
                 time.sleep(self.pause)
                 tries -= 1
                 if tries == 0:
-                    raise e
+                    raise err
 
         return val
-                
+
 
 
 class ExecutableSearcher(object):
-
+    """Base class for cross-platform executable searchers"""
     pass
 
 
@@ -62,7 +64,7 @@ class WindowsExecutableSearcher(ExecutableSearcher):
             self.exe_name = exe_name
 
     def find(self, root):
-        """ 
+        """
             Search below root for the given executable
         """
         found_exe = self.exe_name
@@ -74,7 +76,3 @@ class WindowsExecutableSearcher(ExecutableSearcher):
                 pass
 
         return found_exe
-
-
-
-

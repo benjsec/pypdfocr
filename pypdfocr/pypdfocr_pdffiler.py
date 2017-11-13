@@ -18,16 +18,16 @@
     on keywords
 """
 
-import sys, os
-import re
 import logging
-import shutil
 
 from PyPDF2 import PdfFileReader
+
 from .pypdfocr_filer import PyFiler
 from .pypdfocr_filer_dirs import PyFilerDirs
 
+
 class PyPdfFiler(object):
+    """Class for filing pdf files after OCR."""
     def __init__(self, filer):
 
         assert isinstance(filer, PyFiler)
@@ -36,35 +36,42 @@ class PyPdfFiler(object):
         # Whether to fall back on filename for matching keywords against
         # if there is no match in the text
         self.file_using_filename = False
+        self.filename = None
 
     def iter_pdf_page_text(self, filename):
+        """Generator to return text from a pdf file."""
         self.filename = filename
         reader = PdfFileReader(filename)
-        logging.info("pdf scanner found %d pages in %s" % (reader.getNumPages(), filename))
+        logging.info("pdf scanner found %d pages in %s",
+                     reader.getNumPages(), filename)
         for pgnum in range(reader.getNumPages()):
             text = reader.getPage(pgnum).extractText()
             # text = text.encode('ascii', 'ignore')
             text = text.replace('\n', ' ')
             yield text
 
-    def _get_matching_folder(self, pdfText):
-        searchText = pdfText.lower()
-        for folder,strings in self.filer.folder_targets.items():
-            for s in strings:
-                logging.debug("Checking string %s" % s)
-                if s in searchText:
-                    logging.info("Matched keyword '%s'" % s)
+    def _get_matching_folder(self, pdf_text):
+        search_text = pdf_text.lower()
+        for folder, strings in self.filer.folder_targets.items():
+            for string in strings:
+                logging.debug("Checking string %s", string)
+                if string in search_text:
+                    logging.info("Matched keyword '%s'", string)
                     return folder
         # No match found, so return
         return None
 
     def file_original(self, original_filename):
+        """Use the filer to file the original."""
         return self.filer.file_original(original_filename)
 
     def move_to_matching_folder(self, filename):
+        """File the original based on keyword matching in text body."""
         for page_text in self.iter_pdf_page_text(filename):
             tgt_folder = self._get_matching_folder(page_text)
-            if tgt_folder: break  # Stop searching through pdf pages as soon as we find a match
+            if tgt_folder:
+                # Stop searching through pdf pages as soon as we find a match
+                break
 
         if not tgt_folder and self.file_using_filename:
             tgt_folder = self._get_matching_folder(filename)
@@ -72,8 +79,8 @@ class PyPdfFiler(object):
         tgt_file = self.filer.move_to_matching_folder(filename, tgt_folder)
         return tgt_file
 
-if __name__ == '__main__':
-    p = PyPdfFiler(PyFilerDirs())
-    for page_text in p.iter_pdf_page_text("scan_ocr.pdf"):
-        print(page_text)
 
+if __name__ == '__main__':
+    FILER = PyPdfFiler(PyFilerDirs())
+    for pg_text in FILER.iter_pdf_page_text("scan_ocr.pdf"):
+        print(pg_text)

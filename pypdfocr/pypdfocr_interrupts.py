@@ -1,4 +1,3 @@
-
 # Copyright 2015 Virantha Ekanayake All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,22 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import signal, logging
+"""Handle keyboard interrupts in multiprocess workers gracefully."""
 
-"""
-    Used for handling keyboard interrupts in Pools.
-        Basically, throw an Exception when we see the ctrl-c, so that it actaully is propagated to the parent class
-"""
+import signal
+import logging
 
-class KeyboardInterruptError(Exception): pass
+# Used for handling keyboard interrupts in Pools.
+# Basically, throw an Exception when we see the ctrl-c, so that it
+# actually is propagated to the parent class.
+
+
+class KeyboardInterruptError(Exception):
+    """Exception to raise for KeyboardInterrupt."""
+
 
 def signal_handle(_signal, frame):
+    """Handle signal interrupt by raising KeyboardInterruptError."""
     logging.debug("Stopping job")
     raise KeyboardInterruptError()
 
 
 def init_worker():
-    """ used for catching ctrl-c
-    """
+    """Used for catching ctrl-c"""
     signal.signal(signal.SIGINT, signal_handle)
-
