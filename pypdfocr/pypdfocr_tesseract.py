@@ -23,8 +23,6 @@ import logging
 import os
 import subprocess
 import sys
-# import glob
-# from subprocess import CalledProcessError
 
 from multiprocessing import Pool
 from pkg_resources import parse_version

@@ -29,11 +29,8 @@ import sys
 import time
 import traceback
 from functools import wraps
-# import shutil
-# import itertools
 
 import yaml
-# from PIL import Image
 
 
 # Special work-around to support multiprocessing and pyinstaller --onefile on windows systms

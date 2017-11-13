@@ -20,13 +20,9 @@
     Wrap ImageMagick calls.  Yes, this is ugly.
 """
 
-# import sys
 import logging
 import os
 import subprocess
-# import glob
-# import functools
-# import signal
 
 from multiprocessing import Pool
 from .pypdfocr_interrupts import init_worker
