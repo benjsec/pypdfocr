@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
+"""Custom imports for multiprocessing to allow cross-platform compatability.
+"""
+
 import os
 import sys
+# import multiprocessing
 
-""" Special work-around to support multiprocessing and pyinstaller --onefile on windows systms
-
-    https://github.com/pyinstaller/pyinstaller/wiki/Recipe-Multiprocessing
-"""
+# Special work-around to support multiprocessing and pyinstaller --onefile on windows systms
+# https://github.com/pyinstaller/pyinstaller/wiki/Recipe-Multiprocessing
 try:
     # Python 3.4+
     if sys.platform.startswith('win'):
@@ -51,12 +52,3 @@ class _Popen(forking.Popen):
                     os.putenv('_MEIPASS2', '')
 
 forking.Popen = _Popen
-
-#class Process(multiprocessing.Process):
-    #_Popen = _Popen
-
-# ...
-
-if __name__ == '__main__':
-    # On Windows calling this function is necessary.
-    multiprocessing.freeze_support()

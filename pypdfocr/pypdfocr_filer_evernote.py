@@ -1,4 +1,3 @@
-
 # Copyright 2013 Virantha Ekanayake All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,34 +11,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
+"""
+    Implementation of a filer class
+        -> Files documents to Evernote notebooks (each document becomes a new note)
+"""
+
+
+import functools
+import hashlib
 import logging
 import os
 import shutil
-import hashlib
-import time
 import sys
+import time
 
 from .pypdfocr_filer import PyFiler
-
-import functools
 
 try:
     from evernote.api.client import EvernoteClient
     import evernote.edam.type.ttypes as Types
-    import evernote.edam.userstore.constants as UserStoreConstants
     from evernote.edam.error.ttypes import EDAMUserException
     from evernote.edam.error.ttypes import EDAMSystemException
-    from evernote.edam.error.ttypes import EDAMNotFoundException
     from evernote.edam.error.ttypes import EDAMErrorCode
     ENABLED = True
 except ImportError:
     ENABLED = False
 
-
-"""
-    Implementation of a filer class 
-        -> Files documents to Evernote notebooks (each document becomes a new note)
-"""
 class en_handle(object):
     """ Generic exception handler for Evernote actions
     """
@@ -47,6 +46,8 @@ class en_handle(object):
         # f is the method being decorated, so save it so we can call it later!
         self.f = f
         functools.update_wrapper(self, f)
+        self.cls = None
+        self.obj = None
 
     def __get__(self, instance, owner):
         # Save a ptr to the object being decorated
@@ -58,38 +59,43 @@ class en_handle(object):
         # The actual meat of the decorator
 
         # Call the original method being decorated
-        retryCount = 3
+        retry_count = 3
         retry_auth = False
         msg = "EVERNOTE ERROR: %s"
-        r = None
-        while retryCount > 0:
-            try: 
-                retryCount -= 1
+        ret = None
+        while retry_count > 0:
+            try:
+                retry_count -= 1
                 if retry_auth:
                     logging.debug("Retrying")
                     self.obj._connect_to_evernote(self.obj.dictUserInfo)
                 retry_auth = False
                 logging.debug("executing user function")
-                r = self.f.__call__(self.obj, *args, **kwargs)
+                ret = self.f.__call__(self.obj, *args, **kwargs)
                 break
-            except EDAMUserException as e:
-                err = e.errorCode
-                c = EDAMErrorCode
-                if err == c.AUTH_EXPIRED or err == c.DATA_REQUIRED:
-                    logging.debug(msg % "Authorization expired, retrying...")
+            except EDAMUserException as err:
+                err_code = err.errorCode
+                code = EDAMErrorCode
+                if err_code in [code.AUTH_EXPIRED, code.DATA_REQUIRED]:
+                    logging.debug(msg, "Authorization expired, retrying...")
                     retry_auth = True
                     time.sleep(3)
                 else:
-                    logging.debug(msg % ("Unhandled error %s:%s" % (c._VALUES_TO_NAMES[err], e.parameter)))
-        return r
+                    logging.debug(
+                        msg,
+                        "Unhandled error %s:%s" %
+                        (code._VALUES_TO_NAMES[err_code], err.parameter))
+        return ret
 
 
 
 class PyFilerEvernote(PyFiler):
-    
+    """Class to handle filing scanned PDFs to evernote"""
+
     def get_target_folder(self):
         return self._target_folder
-    def set_target_folder (self, target_folder):
+
+    def set_target_folder(self, target_folder):
         """ Override this to make sure we only have the basename"""
         print("Setting target_folder %s" % target_folder)
         if target_folder:
@@ -99,11 +105,11 @@ class PyFilerEvernote(PyFiler):
 
     target_folder = property(get_target_folder, set_target_folder)
 
-    def get_default_folder (self):
+    def get_default_folder(self):
         """ Override this to make sure we only have the basename"""
         return self._default_folder
 
-    def set_default_folder (self, default_folder):
+    def set_default_folder(self, default_folder):
         """ Override this to make sure we only have the basename"""
         if default_folder:
             self._default_folder = os.path.basename(default_folder)
@@ -113,35 +119,39 @@ class PyFilerEvernote(PyFiler):
     default_folder = property(get_default_folder, set_default_folder)
 
     def __init__(self, dev_token):
+        super(PyFilerEvernote, self).__init__()
         self.target_folder = None
         self.default_folder = None
         self.original_move_folder = None
         self.folder_targets = {}
-        self.dictUserInfo = { 'dev_token': dev_token }
+        self.dictUserInfo = {'dev_token': dev_token}
         self._connect_to_evernote(self.dictUserInfo)
 
     def _connect_to_evernote(self, dictUserInfo):
         """
             Establish a connection to evernote and authenticate.
 
-            :param dictUserInfo: Dict of user info like user/passwrod.  For now, just the dev token
+            :param dictUserInfo: Dict of user info like user/password.
+               For now, just the dev token
             :returns success: Return wheter connection succeeded
             :rtype bool:
         """
         print("Authenticating to Evernote")
         dev_token = dictUserInfo['dev_token']
-        logging.debug("Authenticating using token %s" % dev_token)
+        logging.debug("Authenticating using token %s", dev_token)
         user = None
         try:
             self.client = EvernoteClient(token=dev_token, sandbox=False)
             self.user_store = self.client.get_user_store()
             user = self.user_store.getUser()
-        except EDAMUserException as e:
-            err = e.errorCode
-            print("Error attempting to authenticate to Evernote: %s - %s" % (EDAMErrorCode._VALUES_TO_NAMES[err], e.parameter))
-        except EDAMSystemException as e:
-            err = e.errorCode
-            print("Error attempting to authenticate to Evernote: %s - %s" % (EDAMErrorCode._VALUES_TO_NAMES[err], e.message))
+        except EDAMUserException as err:
+            err_code = err.errorCode
+            print("Error attempting to authenticate to Evernote: %s - %s" %
+                  (EDAMErrorCode._VALUES_TO_NAMES[err_code], err.parameter))
+        except EDAMSystemException as err:
+            err_code = err.errorCode
+            print("Error attempting to authenticate to Evernote: %s - %s" %
+                  (EDAMErrorCode._VALUES_TO_NAMES[err_code], err.message))
             sys.exit(-1)
 
         if user:
@@ -149,11 +159,12 @@ class PyFilerEvernote(PyFiler):
         return True
 
     def add_folder_target(self, folder, keywords):
-        assert folder not in self.folder_targets, "Target folder already defined! (%s)" % (folder)
+        assert folder not in self.folder_targets, \
+            "Target folder already defined! (%s)" % (folder)
         self.folder_targets[folder] = keywords
 
     def file_original(self, original_filename):
-        """ 
+        """
             Just file it to the local file system (don't upload to evernote)
         """
         if not self.original_move_folder:
@@ -161,9 +172,11 @@ class PyFilerEvernote(PyFiler):
             return original_filename
 
         tgt_path = self.original_move_folder
-        logging.debug("Moving original %s to %s" % (original_filename, tgt_path))
-        tgtfilename = os.path.join(tgt_path, os.path.basename(original_filename))
-        tgtfilename = self._get_unique_filename_by_appending_version_integer(tgtfilename)
+        logging.debug("Moving original %s to %s", original_filename, tgt_path)
+        tgtfilename = os.path.join(
+            tgt_path, os.path.basename(original_filename))
+        tgtfilename = self._get_unique_filename_by_appending_version_integer(
+            tgtfilename)
 
         shutil.move(original_filename, tgtfilename)
         return tgtfilename
@@ -192,9 +205,6 @@ class PyFilerEvernote(PyFiler):
             :rtype Types.Notebook:
         """
         # Get the noteStore
-        #note_store = self.client.get_note_store()
-        #notebooks = note_store.listNotebooks()
-        #notebooks = {n.name:n for n in notebooks}
         notebooks = self._get_notebooks()
         if notebook_name in notebooks:
             notebook = notebooks[notebook_name]
@@ -208,7 +218,6 @@ class PyFilerEvernote(PyFiler):
             notebook.name = notebook_name
             notebook.stack = self.target_folder
             notebook = self._create_notebook(notebook)
-            #notebook = note_store.createNotebook(notebook)
             return notebook
 
     @en_handle
@@ -217,13 +226,13 @@ class PyFilerEvernote(PyFiler):
         note = Types.Note()
         note.title = os.path.basename(filename)
         note.notebookGuid = notebook.guid
-        note.content = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">'
+        note.content = '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">'
         note.content += '<en-note>Uploaded by PyPDFOCR <br/>'
-       
 
         logging.debug("Loading PDF")
         md5 = hashlib.md5()
-        with open(filename,'rb') as f: 
+        with open(filename, 'rb') as f:
             pdf_bytes = f.read()
 
         logging.debug("Calculating md5 checksum of pdf")
@@ -231,11 +240,11 @@ class PyFilerEvernote(PyFiler):
         md5hash = md5.hexdigest()
 
         logging.debug("Uploading note")
-        
+
         # Create the Data type for evernote that goes into a resource
         pdf_data = Types.Data()
         pdf_data.bodyHash = md5hash
-        pdf_data.size = len(pdf_bytes) 
+        pdf_data.size = len(pdf_bytes)
         pdf_data.body = pdf_bytes
 
         # Add a link in the evernote boy for this content
@@ -243,7 +252,7 @@ class PyFilerEvernote(PyFiler):
         logging.debug(link)
         note.content += link
         note.content += '</en-note>'
-        
+
         resource_list = []
         pdf_resource = Types.Resource()
         pdf_resource.data = pdf_data
@@ -258,7 +267,7 @@ class PyFilerEvernote(PyFiler):
 
         return note
 
-        
+
     def move_to_matching_folder(self, filename, foldername):
         """
             Use the evernote API to create a new note:
@@ -272,16 +281,16 @@ class PyFilerEvernote(PyFiler):
         assert self.default_folder != None
 
         if not foldername:
-            logging.info("[DEFAULT] %s --> %s" % (filename, self.default_folder))
+            logging.info("[DEFAULT] %s --> %s", filename, self.default_folder)
             foldername = self.default_folder
-        else:   
-            logging.info("[MATCH] %s --> %s" % (filename, foldername))
+        else:
+            logging.info("[MATCH] %s --> %s", filename, foldername)
 
         # Check if the evernote notebook exists
-        print ("Checking for notebook named %s" % foldername)
+        print("Checking for notebook named %s" % foldername)
         notebook = self._check_and_make_notebook(foldername)
         print("Uploading %s to %s" % (filename, foldername))
-        
+
         note = self._create_evernote_note(notebook, filename)
 
         # Store the note in evernote
@@ -295,10 +304,9 @@ class PyFilerEvernote(PyFiler):
 if __name__ == '__main__': # pragma: no cover
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
     logging.basicConfig(level=logging.INFO, format='%(message)s')
-    p = PyFilerEvernote()
-    p.add_folder_target("auto", ['dmv'])
-    p.target_folder = 'myuploads'
-    p.default_folder = 'default'
-    p.original_move_folder = None
-
-    p.move_to_matching_folder('../dmv/dmv_ocr.pdf', 'auto')
+    FILER = PyFilerEvernote(dev_token=None)
+    FILER.add_folder_target("auto", ['dmv'])
+    FILER.target_folder = 'myuploads'
+    FILER.default_folder = 'default'
+    FILER.original_move_folder = None
+    FILER.move_to_matching_folder('../dmv/dmv_ocr.pdf', 'auto')
