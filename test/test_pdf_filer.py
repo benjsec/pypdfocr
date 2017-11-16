@@ -1,39 +1,52 @@
 import os
+import shutil
 
-from mock import patch, call
+import pytest
 
-from pypdfocr import pypdfocr as P
+from pypdfocr import pypdfocr
 
 
 class TestPDFFiler:
 
-    @patch('shutil.move')
-    def test_file_by_filename(self, mock_move):
+    @pytest.fixture
+    def pdfocr(self):
+        return pypdfocr.PyPDFOCR()
+
+    @pytest.fixture
+    def asset_dir(self, tmpdir):
+        """Copy the sample pdfs to a temporary directory and return its path.
+        """
+        test_dir = str(tmpdir.join('source'))
+        pdfs = os.path.join(os.path.dirname(__file__), 'pdfs')
+        shutil.copytree(pdfs, test_dir)
+        return test_dir
+
+    def test_file_by_filename(self, tmpdir, pdfocr, asset_dir):
         """
             Test filing of single pdf based on filename.
         """
 
-        # Mock the move function so we don't actually end up filing
-        p = P.PyPDFOCR()
-        filename = os.path.join(os.path.dirname(__file__),
-                                "pdfs",
-                                "test_super_long_keyword.pdf")
-        out_filename = filename.replace(".pdf", "_ocr.pdf")
+        infile = os.path.join(asset_dir, "test_super_long_keyword.pdf")
+        conffile = tmpdir.join("test.conf")
+        conffile.write("""
+            target_folder: "{dirpath}/target"
+            default_folder: "{dirpath}/target/default"
+            original_move_folder: "{dirpath}/original"
 
-        if os.path.exists(out_filename):
-            os.remove(out_filename)
+            folders:
+                recipe:
+                    - recipes
+                patents:
+                    - patent
+            """.format(dirpath=str(tmpdir)))
+        opts = [infile, "--config", str(conffile), "-f", "-n"]
+        pdfocr.go(opts)
 
-        print("Current directory: %s" % os.getcwd())
-        conf_path = os.path.join(
-            os.path.dirname(__file__), 'test_pypdfocr_config.yaml')
+        outfile = infile.replace(".pdf", "_ocr.pdf")
+        # File should not be in original location anymore
+        assert not os.path.exists(outfile)
 
-        opts = [filename, "--config={}".format(conf_path), "-f", "-n"]
-        p.go(opts)
-
-        assert os.path.exists(out_filename)
-        os.remove(out_filename)
-
-        calls = [call(out_filename, os.path.abspath(
-            os.path.join(
-                'temp', 'target', 'recipe', os.path.basename(out_filename))))]
-        mock_move.assert_has_calls(calls)
+        # Assert the file move
+        ocr_dest = os.path.join(
+            str(tmpdir), "target", "recipe", os.path.basename(outfile))
+        assert os.path.exists(ocr_dest)

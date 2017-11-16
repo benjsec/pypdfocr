@@ -1,19 +1,36 @@
-import os
+from collections import namedtuple
 import logging
+import os
+import shutil
 
 import pytest
+from mock import patch
 from PyPDF2 import PdfFileReader
-from mock import patch, call
 
-from pypdfocr import pypdfocr as P
+from pypdfocr import pypdfocr
+
+
+Spec = namedtuple(
+    "TestSpec", ["filename", "target_dir", "expected_ocr"])
 
 
 class TestPydfocr:
 
-    def setup(self):
-        self.p = P.PyPDFOCR()
+    @pytest.fixture
+    def pdfocr(self):
+        return pypdfocr.PyPDFOCR()
+
+    @pytest.fixture
+    def asset_dir(self, tmpdir):
+        """Copy the sample pdfs to a temporary directory and return its path.
+        """
+        test_dir = str(tmpdir.join('source'))
+        pdfs = os.path.join(os.path.dirname(__file__), 'pdfs')
+        shutil.copytree(pdfs, test_dir)
+        return test_dir
 
     def _iter_pdf(self, filename):
+        """Yield one page of PDF text at a time."""
         with open(filename, 'rb') as f:
             reader = PdfFileReader(f)
             logging.debug("pdf scanner found %d pages in %s",
@@ -25,59 +42,24 @@ class TestPydfocr:
 
     filepath = os.path.dirname(__file__)
     pdf_tests = [
-        (
-            filepath,
-            os.path.join(filepath, "temp", "target", "recipe"),
-            os.path.join(filepath, "pdfs", "test_recipe.pdf"),
-            [["Simply Recipes"], ]),
-        (
-            filepath,
-            os.path.join(filepath, "temp", "target", "patents"),
-            os.path.join("pdfs", "test_patent.pdf"),
-            [
-                ["asynchronous", "subject to", "20 Claims"],  # Page 1
-                ["FOREIGN PATENT"],                           # Page 2
-            ]),
-        (
-            filepath,
-            os.path.join(filepath, "temp", "target", "default"),
-            os.path.join("pdfs", "test_sherlock.pdf"),
-            [
-                ["Bohemia", "Trincomalee"],  # Page 1
-                ["hundreds of times"],       # Page 2
-            ]),
-        (
-            os.path.join(filepath, "pdfs"),
-            os.path.join(filepath, "temp", "target", "default"),
-            "test_sherlock.pdf",
-            [
-                ["Bohemia", "Trincomalee"],  # Page 1
-                ["hundreds of times"],       # Page 2
-            ]),
-        (
-            filepath,
-            os.path.join(filepath, "temp", "target", "recipe"),
-            os.path.join("..", "test", "pdfs", "1.pdf"),
-            [
-                ["Simply", "Recipes"],
-            ]),
-        (
-            filepath,
-            os.path.join(filepath, "temp", "target", "recipe"),
-            os.path.join("..", "test", "pdfs", "test_recipe_sideways.pdf"),
-            [
-                ["Simply", "Recipes", "spinach"],
-            ]),
-        ]
+        Spec("test_recipe.pdf", "recipe", [["Simply Recipes"]]),
+        Spec("test_patent.pdf", "patents",
+             [
+                 ["asynchronous", "Subject to", "20 Claims"],  # Page 1
+                 ["FOREIGN PATENT"], ]),                       # Page 2
+        Spec("test_sherlock.pdf", "default",
+             [
+                 ["Bohemia", "Trincomalee"],  # Page 1
+                 ["hundreds of times"], ]),   # Page 2
+        Spec("test_recipe_sideways.pdf", "recipe",
+             [["Simply", "Recipes", "spinach"], ]),
+    ]
 
     # @pytest.mark.skipif(True, reason="Just testing")
-    @pytest.mark.parametrize("dirname, tgt_folder, filename, expected",
-                             pdf_tests)
-    def test_standalone(self, dirname, tgt_folder, filename, expected):
+    @pytest.mark.parametrize("test_spec", pdf_tests)
+    def test_standalone(self, test_spec, asset_dir, pdfocr):
         """
             Test the single file conversion with no filing.
-            Tests relative paths (".."), files in subirs, and files in current
-               dir
             Checks for that _ocr file is created and keywords found in pdf.
             Modify :attribute:`pdf_tests` for changing keywords, etc
 
@@ -86,26 +68,21 @@ class TestPydfocr:
         """
         # Run a single file conversion
 
-        cwd = os.getcwd()
-        os.chdir(dirname)
-        opts = [filename, '--skip-preprocess']
-        self.p.go(opts)
+        infile = os.path.join(asset_dir, test_spec.filename)
+        opts = [infile, '--skip-preprocess']
+        pdfocr.go(opts)
 
-        out_filename = filename.replace(".pdf", "_ocr.pdf")
-        assert os.path.exists(out_filename)
-        for i, t in enumerate(self._iter_pdf(out_filename)):
-            if len(expected) > i:
-                for keyword in expected[i]:
-                    assert keyword in t
-            print("\n----------------------\nPage %d\n" % i)
-            print(t)
-        os.remove(out_filename)
-        os.chdir(cwd)
+        outfile = infile.replace(".pdf", "_ocr.pdf")
+        assert os.path.exists(outfile)
+
+        for pgnum, text in enumerate(self._iter_pdf(outfile)):
+            print(u"\n----------------------\nPage {}\n{}".format(pgnum, text))
+            for phrase in test_spec.expected_ocr[pgnum]:
+                assert phrase in text
 
     # @pytest.mark.skipif(True, reason="just testing")
-    @pytest.mark.parametrize("dirname, tgt_folder, filename, expected",
-                             [pdf_tests[0]])
-    def test_standalone_email(self, dirname, tgt_folder, filename, expected):
+    @pytest.mark.parametrize("test_spec", [pdf_tests[0]])
+    def test_standalone_email(self, test_spec, asset_dir, pdfocr, tmpdir):
         """
             Get coverage on the email after conversion of a single file.
             Use mock to stub out the smtpllib
@@ -114,22 +91,19 @@ class TestPydfocr:
 
         # Mock the smtplib to test the email functions
         with patch("smtplib.SMTP") as mock_smtp:
-            cwd = os.getcwd()
-            os.chdir(dirname)
-            opts = [filename, "--preprocess",
-                    "--config=test_pypdfocr_config.yaml", "-m"]
-            self.p.go(opts)
 
-            out_filename = filename.replace(".pdf", "_ocr.pdf")
-            assert os.path.exists(out_filename)
-            for i, t in enumerate(self._iter_pdf(out_filename)):
-                if len(expected) > i:
-                    for keyword in expected[i]:
-                        assert keyword in t
-                print("\n----------------------\nPage %d\n" % i)
-                print(t)
-            os.remove(out_filename)
-            os.chdir(cwd)
+            infile = os.path.join(asset_dir, test_spec.filename)
+            conffile = tmpdir.join("test.conf")
+            conffile.write("""
+                mail_smtp_server: "smtp.gmail.com:587"
+                mail_smtp_login: "someone@gmail.com"
+                mail_smtp_password: "blah"
+                mail_from_addr: "someone#gmail.com"
+                mail_to_list:
+                    - "someone@gmail.com"
+                """)
+            opts = [infile, "--preprocess", "--config", str(conffile), "-m"]
+            pdfocr.go(opts)
 
             # Assert the smtp calls
             instance = mock_smtp.return_value
@@ -138,72 +112,82 @@ class TestPydfocr:
                                                    "blah")
             assert instance.sendmail.called
 
-    @patch('shutil.move')
-    @pytest.mark.parametrize(
-        "config",
-        [(os.path.join(filepath, "test_pypdfocr_config.yaml")),
-         (os.path.join(filepath,
-                       "test_pypdfocr_config_no_move_original.yaml"))])
-    @pytest.mark.parametrize("dirname, tgt_folder, filename, expected",
-                             pdf_tests[0:3])
-    def test_standalone_filing(self, mock_move, config,
-                               dirname, tgt_folder, filename, expected):
-        """
-            Test filing of single pdf.  Also test moving of original file.
 
-            Kind of hacked up right now, but it tries to test a lot of things
-            (maybe too many)
+    # @pytest.mark.skipif(True, reason="just testing")
+    @pytest.mark.parametrize("test_spec", pdf_tests[0:3])
+    def test_filing(self, test_spec, asset_dir, pdfocr, tmpdir):
+        """
+            Test filing of single pdf. 
         """
 
-        # Mock the move function so we don't actually end up filing
-        cwd = os.getcwd()
-        if os.path.exists("temp"):
-            os.chdir("temp")
-            for d in [os.path.join('target', 'patents'),
-                      os.path.join('target', 'recipe')]:
-                if os.path.exists(d):
-                    os.removedirs(d)
-            os.chdir(cwd)
+        infile = os.path.join(asset_dir, test_spec.filename)
+        conffile = tmpdir.join("test.conf")
+        conffile.write("""
+            target_folder: "{dirpath}/target"
+            default_folder: "{dirpath}/target/default"
 
-        os.chdir(dirname)
-        print("Current directory: %s" % os.getcwd())
-        opts = [filename, '--skip-preprocess', "--config=%s" % config, "-f"]
-        self.p.go(opts)
+            folders:
+                recipe:
+                    - recipes
+                patents:
+                    - patent
+            """.format(dirpath=str(tmpdir)))
+        opts = [infile, '--skip-preprocess', "--config", str(conffile), "-f"]
+        pdfocr.go(opts)
 
-        out_filename = filename.replace(".pdf", "_ocr.pdf")
-        assert os.path.exists(out_filename)
-        for i, t in enumerate(self._iter_pdf(out_filename)):
-            if len(expected) > i:
-                for keyword in expected[i]:
-                    assert keyword in t
-            print("\n----------------------\nPage %d\n" % i)
-            print(t)
-        os.remove(out_filename)
-        os.chdir(cwd)
+        outfile = test_spec.filename.replace(".pdf", "_ocr.pdf")
 
-        # Assert the smtp calls
-        calls = [call(out_filename,
-                      os.path.abspath(
-                          os.path.join(
-                              tgt_folder, os.path.basename(out_filename))))]
-        if not "no_move_original" in config:
-            new_file_name = os.path.basename(filename).replace(".pdf",
-                                                               "_2.pdf")
-            calls.append(call(filename,
-                              os.path.abspath(os.path.join(
-                                  "test", "temp", "original", new_file_name))))
-        mock_move.assert_has_calls(calls)
+        # Assert the file move
+        ocr_dest = os.path.join(
+            str(tmpdir), "target", test_spec.target_dir, outfile)
+        assert os.path.exists(ocr_dest)
 
-    def test_set_binaries(self):
+    # @pytest.mark.skipif(True, reason="just testing")
+    @pytest.mark.parametrize("test_spec", pdf_tests[0:3])
+    def test_filing_move_original(self, test_spec, asset_dir, pdfocr, tmpdir):
+        """
+            Test filing of single pdf as well as moving original file.
+        """
+
+        infile = os.path.join(asset_dir, test_spec.filename)
+        conffile = tmpdir.join("test.conf")
+        conffile.write("""
+            target_folder: "{dirpath}/target"
+            default_folder: "{dirpath}/target/default"
+            original_move_folder: "{dirpath}/original"
+
+            folders:
+                recipe:
+                    - recipes
+                patents:
+                    - patent
+            """.format(dirpath=str(tmpdir)))
+
+        opts = [infile, '--skip-preprocess', "--config", str(conffile), "-f"]
+        pdfocr.go(opts)
+
+        outfile = test_spec.filename.replace(".pdf", "_ocr.pdf")
+
+        # Assert the file move
+        ocr_dest = os.path.join(
+            str(tmpdir), "target", test_spec.target_dir, outfile)
+        assert os.path.exists(ocr_dest)
+
+        original_dest = os.path.join(
+            str(tmpdir), "original", test_spec.filename)
+        assert os.path.exists(original_dest)
+
+    # @pytest.mark.skipif(True, reason="just testing")
+    def test_set_binaries(self, pdfocr):
         """ Test the setup_exteral_tools
         """
-        self.p.config = {}
-        self.p.config["tesseract"] = {"binary":"/usr/bin/tesseract"}
-        self.p.config["ghostscript"] = {"binary":"/usr/bin/ghostscript"}
-        self.p._setup_external_tools()
+        pdfocr.config = {}
+        pdfocr.config["tesseract"] = {"binary":"/usr/bin/tesseract"}
+        pdfocr.config["ghostscript"] = {"binary":"/usr/bin/ghostscript"}
+        pdfocr._setup_external_tools()
         if not os.name == 'nt':
-            assert self.p.ts.binary == "/usr/bin/tesseract"
-            assert self.p.gs.binary == "/usr/bin/ghostscript"
+            assert pdfocr.ts.binary == "/usr/bin/tesseract"
+            assert pdfocr.gs.binary == "/usr/bin/ghostscript"
         else:
-            assert self.p.ts.binary == '"/usr/bin/tesseract"'
-            assert self.p.gs.binary == '"/usr/bin/ghostscript"'
+            assert pdfocr.ts.binary == '"/usr/bin/tesseract"'
+            assert pdfocr.gs.binary == '"/usr/bin/ghostscript"'
