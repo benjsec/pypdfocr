@@ -36,8 +36,6 @@ class TestPDFFiler:
             folders:
                 recipe:
                     - recipes
-                patents:
-                    - patent
             """.format(dirpath=str(tmpdir)))
         opts = [infile, "--config", str(conffile), "-f", "-n"]
         pdfocr.go(opts)
@@ -49,4 +47,28 @@ class TestPDFFiler:
         # Assert the file move
         ocr_dest = os.path.join(
             str(tmpdir), "target", "recipe", os.path.basename(outfile))
+        assert os.path.exists(ocr_dest)
+
+    def test_filename_not_found(self, tmpdir, pdfocr, asset_dir):
+        """Test filing a pdf if no keyword is found."""
+
+        infile = os.path.join(asset_dir, "test_super_long_keyword.pdf")
+        conffile = tmpdir.join("test.conf")
+        conffile.write("""
+            target_folder: "{dirpath}/target"
+            default_folder: "{dirpath}/target/default"
+
+            folders:
+                foo:
+                    - foo
+                    - bar
+            """.format(dirpath=str(tmpdir)))
+        opts = [infile, "--config", str(conffile), "-f", "-n"]
+        pdfocr.go(opts)
+
+        outfile = infile.replace(".pdf", "_ocr.pdf")
+
+        # Assert the file move
+        ocr_dest = os.path.join(
+            str(tmpdir), "target", "default", os.path.basename(outfile))
         assert os.path.exists(ocr_dest)
