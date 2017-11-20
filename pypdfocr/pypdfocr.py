@@ -156,8 +156,8 @@ class PyPDFOCR(object):
             :ivar config: Dict of the config file
             :ivar watch: Whether folder watching mode is turned on
             :ivar enable_evernote: Enable filing to evernote
-
         """
+
         parser = argparse.ArgumentParser(
             description=(
                 "Convert scanned PDFs into their OCR equivalent."
@@ -232,23 +232,22 @@ class PyPDFOCR(object):
         self.enable_email = args.mail
         self.match_using_filename = args.match_using_filename
 
-
-        # Deprecating skip_preprocess to make skipping the default (always true).
-        # Tesseract 3.04 is so much better now at handling non-ideal inputs and lines
-        if args.skip_preprocess:
-            print("Warning: --skip_preprocess is not needed any more (defaults"
-                  " to skipping preprocessing).  If you want to enable"
-                  " preprocessing, use the new --preprocess option")
-        self.skip_preprocess = True
-
-        if args.preprocess:
-            self.skip_preprocess = False
-
         if self.debug:
             logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
         if self.verbose:
             logging.basicConfig(level=logging.INFO, format='%(message)s')
+
+        # Deprecating skip_preprocess to make skipping the default (always true).
+        # Tesseract 3.04 is so much better now at handling non-ideal inputs and lines
+        if args.skip_preprocess:
+            logging.warning("--skip-preprocess is not needed any more (defaults"
+                            " to skipping preprocessing).  If you want to enable"
+                            " preprocessing, use the new --preprocess option")
+        self.skip_preprocess = True
+
+        if args.preprocess:
+            self.skip_preprocess = False
 
         # Parse configuration file (YAML) if specified
         if args.configfile:
@@ -266,7 +265,7 @@ class PyPDFOCR(object):
         else:
             self.enable_evernote = False
 
-        if args.enable_filing or args.enable_evernote:
+        if args.enable_filing or self.enable_evernote:
             self.enable_filing = True
             if not args.configfile:
                 parser.error("Please specify a configuration file(CONFIGFILE) to enable filing")

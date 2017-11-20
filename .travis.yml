@@ -8,7 +8,7 @@ before_install:
     - sudo apt-get install -y tesseract-ocr ghostscript imagemagick
 install: 
     - "pip install -r requirements.txt"
-    - "pip install pytest mock"
+    - "pip install pytest mock pytest-catchlog"
     - "pip install ."
 script: 
     - "pytest test"
