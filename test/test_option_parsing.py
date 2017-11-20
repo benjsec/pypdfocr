@@ -44,7 +44,7 @@ class TestOptions:
         opts = ["foo.pdf", "-m"]
         with pytest.raises(SystemExit):
             pdfocr.get_options(opts)
-        
+
     def test_email(self, pdfocr, conffile):
         """Send email option should enable sending email"""
         opts = ["foo.pdf", "--mail", "-c", conffile]
