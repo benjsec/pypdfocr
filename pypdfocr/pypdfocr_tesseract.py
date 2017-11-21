@@ -29,9 +29,13 @@ from pkg_resources import parse_version
 from .pypdfocr_interrupts import init_worker
 
 
+class TesseractException(Exception):
+    """Exception raised for problems with tesseract."""
+
+
 def error(text):
     """Print `text` as error and terminate process."""
-    print("ERROR: %s" % text)
+    logging.error(text)
     sys.exit(-1)
 
 
@@ -51,15 +55,20 @@ class PyTesseract(object):
            Detect windows tesseract location.
         """
         self.lang = 'eng'
-        self.required = "3.02.02"
+        if str(os.name) == 'nt':
+            # NT reports v3.02.02 as 3.02
+            self.required = "3.02"
+        else:
+            self.required = "3.02.02"
         self.threads = config.get('threads', 4)
+        self._ts_version = None
 
         if "binary" in config:  # Override location of binary
             binary = config['binary']
             if os.name == 'nt':
                 binary = '"%s"' % binary
                 binary = binary.replace("\\", "\\\\")
-            logging.info("Setting location for tesseracdt executable to %s", binary)
+            logging.info("Setting location for tesseract executable to %s", binary)
         else:
             if str(os.name) == 'nt':
                 # Explicit str here to get around some MagicMock stuff for
@@ -80,14 +89,18 @@ class PyTesseract(object):
             'TS_FAILED': 'Tesseract-OCR execution failed!',
         }
 
+    @property
+    def ts_version(self):
+        """Return the tesseract version string"""
+        if self._ts_version is None:
+            self._ts_version = self._get_ts_version()
+        return self._ts_version
 
-    def _is_version_uptodate(self):
-        """
-            Make sure the version is current.
-        """
+    def _get_ts_version(self):
+        """Return the tesseract version string"""
         logging.info("Checking tesseract version")
         cmd = "%s -v" % self.binary
-        logging.info(cmd)
+        logging.debug(cmd)
         try:
             ret_output = subprocess.check_output(
                 cmd, shell=True, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -95,24 +108,28 @@ class PyTesseract(object):
             # Could not run tesseract
             error(self.msgs['TS_MISSING'])
 
-        ver_str = '0.0.0'
         for line in ret_output.splitlines():
-            print(line)
             if 'tesseract' in line:
-                ver_str = line.split(' ')[1]
+                return line.split(' ')[1]
+        error(self.msgs['TS_MISSING'])
+
+    def assert_version(self):
+        """Raise an exception if the tesseract version is too old."""
+        if parse_version(self.required) > parse_version(self.ts_version):
+            raise TesseractException(
+                "Tesseract version too old. Required {} Found {}".format(
+                self.required, self.ts_version))
+
+    def _is_version_uptodate(self):
+        """
+            Make sure the version is current.
+        """
         # Aargh, in windows 3.02.02 is reported as version 3.02.
-        if str(os.name) == 'nt':
-            req = self.required[:-3]
-        else:
-            req = self.required
-        print(ver_str)
-        return (parse_version(ver_str) >= parse_version(req)), ver_str
-
-    @staticmethod
-    def _warn(msg): # pragma: no cover
-        """Print `msg` as warning message."""
-        print("WARNING: %s" % msg)
-
+        try:
+            self.assert_version()
+        except TesseractException:
+            return False, self.ts_version
+        return True, self.ts_version
 
     def make_hocr_from_pnms(self, fns):
         """Run OCR on multiple files."""
@@ -124,10 +141,11 @@ class PyTesseract(object):
         pool = Pool(processes=self.threads, initializer=init_worker)
 
         try:
-            hocr_filenames = pool.map(unwrap_self, list(zip([self]*len(fns), fns)))
+            hocr_filenames = pool.map(unwrap_self,
+                                      list(zip([self]*len(fns), fns)))
             pool.close()
         except (KeyboardInterrupt, Exception):
-            print("Caught keyboard interrupt... terminating")
+            logging.info("Caught keyboard interrupt... terminating")
             pool.terminate()
             raise
         finally:
@@ -139,31 +157,29 @@ class PyTesseract(object):
     def make_hocr_from_pnm(self, img_filename):
         """Run OCR on single file."""
         basename = os.path.splitext(img_filename)[0]
-        hocr_filename = "%s.html" % basename
+        if parse_version(self.ts_version) < parse_version("3.03"):
+            # Output format is html for old versions of tesseract
+            hocr_filename = "%s.html" % basename
+        else:
+            # Change extension to .hocr for tesseract 3.03 and higher
+            hocr_filename = "%s.hocr" % basename
 
         if not os.path.exists(img_filename):
             error(self.msgs['TS_img_MISSING'] + " %s" % (img_filename))
 
-        logging.info("Running OCR on %s to create %s.html", img_filename, basename)
+        logging.info("Running OCR on %s to create %s",
+                     img_filename, hocr_filename)
         cmd = '%s "%s" "%s" -psm 1 -c hocr_font_info=1 -l %s hocr' % (
             self.binary, img_filename, basename, self.lang)
-        logging.info(cmd)
+        logging.debug(cmd)
         try:
             subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as err:
             # Could not run tesseract
-            print(err.output)
-            self._warn(self.msgs['TS_FAILED'])
+            logging.error(err.output)
+            logging.warning(self.msgs['TS_FAILED'])
 
         if os.path.isfile(hocr_filename):
-            # Output format is html for old versions of tesseract
-            logging.info("Created %s.html", basename)
+            logging.info("Created %s", hocr_filename)
             return hocr_filename
-        else:
-            # Try changing extension to .hocr for tesseract 3.03 and higher
-            hocr_filename = "%s.hocr" % basename
-            if os.path.isfile(hocr_filename):
-                logging.info("Created %s.hocr", basename)
-                return hocr_filename
-            else:
-                error(self.msgs['TS_FAILED'])
+        error(self.msgs['TS_FAILED'])
