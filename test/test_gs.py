@@ -77,8 +77,8 @@ class TestGS:
 
     def test_get_dpi_fail(self, pygs, asset_dir, monkeypatch, caplog):
         monkeypatch.setattr(
-            'subprocess.check_output', 
-            mock.Mock(side_effect=subprocess.CalledProcessError(returncode=2, 
+            'subprocess.check_output',
+            mock.Mock(side_effect=subprocess.CalledProcessError(returncode=2,
                                                                 cmd=['bad'])))
         pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
         assert "not execute" in caplog.text
