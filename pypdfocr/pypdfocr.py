@@ -33,20 +33,7 @@ from functools import wraps
 import yaml
 
 
-# Special work-around to support multiprocessing and pyinstaller --onefile on windows systms
-# https://github.com/pyinstaller/pyinstaller/wiki/Recipe-Multiprocessing
-try:
-    # Python 3.4+
-    if sys.platform.startswith('win'):
-        import multiprocessing.popen_spawn_win32 as forking
-    else:
-        import multiprocessing.popen_fork as forking
-except ImportError:
-    import multiprocessing.forking as forking
-
-from .pypdfocr_multiprocessing import _Popen
-forking.Popen = _Popen
-
+# from .pypdfocr_multiprocessing import Popen
 from .pypdfocr_pdf import PyPdf
 from .pypdfocr_tesseract import PyTesseract
 from .pypdfocr_gs import PyGs
