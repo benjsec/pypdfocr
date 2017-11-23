@@ -5,7 +5,7 @@ python:
     - "3.6"
 before_install:
     - sudo apt-get -qq update
-    - sudo apt-get install -y tesseract-ocr ghostscript imagemagick
+    - sudo apt-get install -y tesseract-ocr ghostscript imagemagick poppler-utils
 install: 
     - "pip install -r requirements.txt"
     - "pip install pytest mock pytest-catchlog"
