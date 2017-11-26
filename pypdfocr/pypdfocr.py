@@ -33,7 +33,7 @@ from functools import wraps
 import yaml
 
 
-# from .pypdfocr_multiprocessing import Popen
+from .pypdfocr_multiprocessing import Popen
 from .pypdfocr_pdf import PyPdf
 from .pypdfocr_tesseract import PyTesseract
 from .pypdfocr_gs import PyGs
@@ -44,6 +44,10 @@ from .pypdfocr_filer_evernote import ENABLED as evernote_enabled
 from .pypdfocr_filer_evernote import PyFilerEvernote
 from .pypdfocr_preprocess import PyPreprocess
 from .version import __version__
+
+
+def setup_logging(level=logging.INFO):
+    logging.basicConfig(level=logging.DEBUG, format='%(level)s - %(message)s')
 
 
 def error(text):
@@ -95,24 +99,12 @@ class PyPDFOCR(object):
     def __init__(self):
         """ Initializes the GhostScript, Tesseract, and PDF helper classes.
         """
-        self.config = {}
-        self.debug = None
-        self.verbose = None
-        self.pdf_filename = None
-        self.lang = None
-        self.watch_dir = None
-        self.enable_email = None
-        self.match_using_filename = None
-        self.skip_preprocess = False
-        self.enable_evernote = False
-        self.enable_filing = False
-        self.watch = False
-        self.filer = None
-        self.pdf_filer = None
+        self.config = None
         self.gs = None
         self.ts = None
-        self.pdf = None
         self.preprocess = None
+        self.filer = None
+        self.pdf_filer = None
 
     @staticmethod
     def _get_config_file(config_file):
@@ -133,7 +125,7 @@ class PyPDFOCR(object):
             Parse the command-line options and set the following object properties:
 
             :param argv: usually just sys.argv[1:]
-            :returns: Nothing
+            :returns: A Namespace containing the config options
 
             :ivar debug: Enable logging debug statements
             :ivar verbose: Enable verbose logging
@@ -154,6 +146,20 @@ class PyPDFOCR(object):
                 % __version__)
         )
 
+        parser.add_argument(
+            '-c', '--config', type=lambda x: open_file_with_timeout(parser, x),
+            dest='configfile', help='Configuration file for defaults and PDF filing')
+        
+        args, argv = parser.parse_known_args(argv)
+
+        # Parse configuration file (YAML) if specified
+        if args.configfile:
+            config = self._get_config_file(args.configfile)
+            logging.debug("Read config from %s", str(args.configfile))
+            logging.debug(config)
+        else:
+            config = {}
+
         parser.add_argument('-d', '--debug', action='store_true',
                             default=False, dest='debug', help='Turn on debugging')
 
@@ -166,15 +172,17 @@ class PyPDFOCR(object):
         parser.add_argument('-l', '--lang',
                             default='eng', dest='lang', help='Language(default eng)')
 
-
-        parser.add_argument('--preprocess', action='store_true',
-                            default=False, dest='preprocess',
+        # Deprecating skip_preprocess to make skipping the default (always true).
+        # Tesseract 3.04 is so much better now at handling non-ideal inputs and lines
+        preproc = parser.add_mutually_exclusive_group()
+        preproc.add_argument('--preprocess', action='store_false',
+                            dest='skip_preprocess',
                             help='Enable preprocessing.' \
                             '  Not really useful now with improved Tesseract 3.04+')
 
-        parser.add_argument('--skip-preprocess', action='store_true',
-                            default=False, dest='skip_preprocess',
-                            help='DEPRECATED: always skips now.')
+        preproc.add_argument('--skip-preprocess', action='store_true',
+                            dest='skip_preprocess',
+                            help='DEPRECATED: Preprocessing is skipped by default.')
 
         #---------
         # Single or watch mode
@@ -196,9 +204,6 @@ class PyPDFOCR(object):
             '-f', '--file', action='store_true', default=False,
             dest='enable_filing', help='Enable filing of converted PDFs')
         filing_group.add_argument(
-            '-c', '--config', type=lambda x: open_file_with_timeout(parser, x),
-            dest='configfile', help='Configuration file for defaults and PDF filing')
-        filing_group.add_argument(
             '-e', '--evernote', action='store_true',
             default=False, dest='enable_evernote', help='Enable filing to Evernote.')
         filing_group.add_argument(
@@ -206,68 +211,47 @@ class PyPDFOCR(object):
             help='Use filename to match if contents did not match anything, '
                  'before filing to default folder')
 
+        # Add sub-section defaults which can be set in config file
+        parser.set_defaults(**{
+            'ghostscript': {},
+            'tesseract': {},
+            'preprocess': {},
+            'evernote': {},
+            'email': {}
+            })
 
-        # Add flow option to single mode extract_images, preprocess, ocr, write
+        if config:
+            parser.set_defaults(**config)        
 
         args = parser.parse_args(argv)
 
-        self.debug = args.debug
-        self.verbose = args.verbose
-        self.pdf_filename = args.pdf_filename
-        self.lang = args.lang
-        self.watch_dir = args.watch_dir
-        self.enable_email = args.mail
-        self.match_using_filename = args.match_using_filename
+        args.enable_email = args.mail
 
-        if self.debug:
-            logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-
-        if self.verbose:
-            logging.basicConfig(level=logging.INFO, format='%(message)s')
-
-        # Deprecating skip_preprocess to make skipping the default (always true).
-        # Tesseract 3.04 is so much better now at handling non-ideal inputs and lines
-        if args.skip_preprocess:
-            logging.warning("--skip-preprocess is not needed any more (defaults"
-                            " to skipping preprocessing).  If you want to enable"
-                            " preprocessing, use the new --preprocess option")
-        self.skip_preprocess = True
-
-        if args.preprocess:
-            self.skip_preprocess = False
-
-        # Parse configuration file (YAML) if specified
-        if args.configfile:
-            self.config = self._get_config_file(args.configfile)
-            logging.debug("Read in configuration file")
-            logging.debug(self.config)
+        if args.debug:
+            setup_logging(logging.DEBUG)
 
         # Evernote filing does not work in py3
         if args.enable_evernote and not evernote_enabled:
-            print("Warning: Evernote filing disabled, could not find evernote"
-                  " API. Evernote not available in py3.")
-            self.enable_evernote = False
-        elif args.enable_evernote:
-            self.enable_evernote = True
-        else:
-            self.enable_evernote = False
+            logging.warning("Evernote filing disabled, could not find evernote"
+                            " API. Evernote not available in py3.")
+            args.enable_evernote = False
 
-        if args.enable_filing or self.enable_evernote:
-            self.enable_filing = True
-            if not args.configfile:
-                parser.error("Please specify a configuration file(CONFIGFILE) to enable filing")
-        else:
-            self.enable_filing = False
+        args.enable_filing = bool(args.enable_filing or args.enable_evernote)
+        #TODO: Move evernote config checking into evernote module
+        # if args.enable_filing or self.enable_evernote:
+        #     self.enable_filing = True
+            # if not args.evernote:
+            #     error("Please specify a configuration file(CONFIGFILE) to enable filing")
+        # else:
+        #     self.enable_filing = False
 
-        self.watch = False
+        args.watch = bool(args.watch_dir)
 
-        if args.watch_dir:
-            logging.debug("Starting to watch")
-            self.watch = True
+        # TODO: Move email config checking into email module
+        # if self.enable_email and not args.email:
+        #     parser.error("Please specify a configuration file(CONFIGFILE) to enable email")
 
-        if self.enable_email:
-            if not args.configfile:
-                parser.error("Please specify a configuration file(CONFIGFILE) to enable email")
+        return args
 
     @staticmethod
     def _clean_up_files(files):
@@ -303,36 +287,36 @@ class PyPDFOCR(object):
         # --------------------------------------------------
         # Some sanity checks
         # --------------------------------------------------
-        assert self.config and self.enable_filing
-        for required in ['target_folder', 'default_folder']:
-            if not required in self.config:
-                error("%s must be specified in config file" % required)
-            else:
-                # Make sure these required folders are in abspath format
-                self.config[required] = os.path.abspath(self.config[required])
-        if 'original_move_folder' in self.config:
-            # User wants to move the original after filing
-            orig = 'original_move_folder'
-            self.config[orig] = os.path.abspath(self.config[orig])
-            if not os.path.exists(self.config[orig]):
-                os.makedirs(self.config[orig])
-            original_move_folder = self.config[orig]
-        else:
+        assert self.config and self.config.enable_filing
+        try:
+            target_folder = os.path.abspath(self.config.target_folder)
+            default_folder = os.path.abspath(self.config.default_folder)
+        except AttributeError:
+            error("target_folder and default_folder must be specified in "
+                  "config file.")
+
+        try:
+            original_move_folder = os.path.abspath(
+                self.config.original_move_folder)
+        except AttributeError:
             original_move_folder = None
+        else:
+            if not os.path.exists(original_move_folder):
+                os.makedirs(original_move_folder)
         # --------------------------------------------------
         # Start the filing object
         # --------------------------------------------------
-        if self.enable_evernote:
-            self.filer = PyFilerEvernote(self.config['evernote_developer_token'])
+        if self.config.enable_evernote:
+            self.filer = PyFilerEvernote(self.config.evernote_developer_token)
         else:
             self.filer = PyFilerDirs()
 
-        self.filer.target_folder = self.config['target_folder']
-        self.filer.default_folder = self.config['default_folder']
+        self.filer.target_folder = target_folder
+        self.filer.default_folder = default_folder
         self.filer.original_move_folder = original_move_folder
 
         self.pdf_filer = PyPdfFiler(self.filer)
-        if self.match_using_filename:
+        if self.config.match_using_filename:
             print("Matching using filename as a fallback to pdf contents")
             self.pdf_filer.file_using_filename = True
 
@@ -343,7 +327,7 @@ class PyPDFOCR(object):
         keyword_count = 0
         folder_count = 0
         if 'folders' in self.config:
-            for folder, keywords in self.config['folders'].items():
+            for folder, keywords in self.config.folders.items():
                 folder_count += 1
                 keyword_count += len(keywords)
                 # Make sure keywords are lower-cased before adding
@@ -358,10 +342,11 @@ class PyPDFOCR(object):
         """
             Instantiate the external tool wrappers with their config dicts
         """
-        self.gs = PyGs(self.config.get('ghostscript', {}))
-        self.ts = PyTesseract(self.config.get('tesseract', {}))
+        logging.error(self.config)
+        self.gs = PyGs(self.config.ghostscript)
+        self.ts = PyTesseract(self.config.tesseract)
         self.pdf = PyPdf(self.gs)
-        self.preprocess = PyPreprocess(self.config.get('preprocess', {}))
+        self.preprocess = PyPreprocess(self.config.preprocess)
         return
 
     def run_conversion(self, pdf_filename):
@@ -390,23 +375,23 @@ class PyPDFOCR(object):
 
         try:
             # Preprocess
-            if not self.skip_preprocess:
+            if not self.config.skip_preprocess:
                 preprocess_imagefilenames = self.preprocess.preprocess(fns)
             else:
                 logging.info("Skipping preprocess step")
                 preprocess_imagefilenames = fns
             # Run teserract
-            self.ts.lang = self.lang
+            self.ts.lang = self.config.lang
             hocr_filenames = self.ts.make_hocr_from_pnms(preprocess_imagefilenames)
 
             # Generate new pdf with overlayed text
-            #ocr_pdf_filename = self.pdf.overlay_hocr(tiff_dpi, hocr_filename, pdf_filename)
-            ocr_pdf_filename = self.pdf.overlay_hocr_pages(img_dpi, hocr_filenames, pdf_filename)
+            ocr_pdf_filename = self.pdf.overlay_hocr_pages(
+                img_dpi, hocr_filenames, pdf_filename)
 
         finally:
             # Clean up the files
             time.sleep(1)
-            if not self.debug:
+            if not self.config.debug:
                 # Need to clean up the original image files before preprocessing
                 if "fns" in locals(): # Have to check if this was set before exception raised
                     logging.info("Cleaning up %s", fns)
@@ -459,11 +444,11 @@ class PyPDFOCR(object):
             Send email using smtp
         """
         print("Sending email status")
-        from_addr = self.config["mail_from_addr"]
-        to_addr_list = self.config["mail_to_list"]
-        smtpserver = self.config["mail_smtp_server"]
-        login = self.config["mail_smtp_login"]
-        password = self.config["mail_smtp_password"]
+        from_addr = self.config.mail_from_addr
+        to_addr_list = self.config.mail_to_list
+        smtpserver = self.config.mail_smtp_server
+        login = self.config.mail_smtp_login
+        password = self.config.mail_smtp_password
 
         subject = "PyPDFOCR converted: %s" % (os.path.basename(outfilename))
         header = 'From: %s\n' % login
@@ -495,20 +480,21 @@ class PyPDFOCR(object):
             #. if filing is enabled, call :func:`file_converted_file`
         """
         # Read the command line options
-        self.get_options(argv)
-
+        self.config = self.get_options(argv)
         # Setup tesseract and ghostscript
         self._setup_external_tools()
 
         # Setup the pdf filing if enabled
-        if self.enable_filing:
+        if self.config.enable_filing:
             self._setup_filing()
 
         # Do the actual conversion followed by optional filing and email
-        if self.watch:
+        if self.config.watch_dir:
+            logging.info("Starting to watch %s", self.config.watch_dir)
             while True:  # Make sure the watcher doesn't terminate
                 try:
-                    py_watcher = PyPdfWatcher(self.watch_dir, self.config.get('watch'))
+                    py_watcher = PyPdfWatcher(self.config.watch_dir,
+                                              self.config.get('watch'))
                     for pdf_filename in py_watcher.start():
                         self._convert_and_file_email(pdf_filename)
                 except KeyboardInterrupt:
@@ -517,7 +503,7 @@ class PyPDFOCR(object):
                     print(traceback.print_exc(err))
                     py_watcher.stop()
         else:
-            self._convert_and_file_email(self.pdf_filename)
+            self._convert_and_file_email(self.config.pdf_filename)
 
     def _convert_and_file_email(self, pdf_filename):
         """
@@ -525,17 +511,18 @@ class PyPDFOCR(object):
             and optional emailing.
         """
         ocr_pdffilename = self.run_conversion(pdf_filename)
-        if self.enable_filing:
+        if self.config.enable_filing:
             filing = self.file_converted_file(ocr_pdffilename, pdf_filename)
         else:
             filing = "None"
 
-        if self.enable_email:
+        if self.config.enable_email:
             self._send_email(pdf_filename, ocr_pdffilename, filing)
 
 
 def main(): # pragma: no cover
     """Run the program"""
+    setup_logging()
     multiprocessing.freeze_support()
     script = PyPDFOCR()
     script.go(sys.argv[1:])

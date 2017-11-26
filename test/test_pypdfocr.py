@@ -163,7 +163,7 @@ class TestPydfocr:
                     - patent
             """.format(dirpath=str(tmpdir)))
 
-        opts = [infile, '--skip-preprocess', "--config", str(conffile), "-f"]
+        opts = [infile, "--config", str(conffile), "-f"]
         pdfocr.go(opts)
 
         outfile = test_spec.filename.replace(".pdf", "_ocr.pdf")
@@ -178,12 +178,19 @@ class TestPydfocr:
         assert os.path.exists(original_dest)
 
     # @pytest.mark.skipif(True, reason="just testing")
-    def test_set_binaries(self, pdfocr):
+    def test_set_binaries(self, pdfocr, tmpdir):
         """ Test the setup_exteral_tools
         """
-        pdfocr.config = {}
-        pdfocr.config["tesseract"] = {"binary":"/usr/bin/tesseract"}
-        pdfocr.config["ghostscript"] = {"binary":"/usr/bin/ghostscript"}
+        conffile = tmpdir.join("conf.yaml")
+        conffile.write("""
+            ghostscript:
+                binary: /usr/bin/ghostscript
+            tesseract:
+                binary: /usr/bin/tesseract
+            """)
+        pdfocr.config = pdfocr.get_options(['foo.pdf', '-c', str(conffile)])
+        # pdfocr.config["tesseract"] = {"binary":"/usr/bin/tesseract"}
+        # pdfocr.config["ghostscript"] = {"binary":"/usr/bin/ghostscript"}
         pdfocr._setup_external_tools()
         if not os.name == 'nt':
             assert pdfocr.ts.binary == "/usr/bin/tesseract"
