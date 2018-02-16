@@ -110,7 +110,8 @@ class PyPdfWatcher(FileSystemEventHandler):
                     else:
                         newtime = time.time()
                         logging.debug(
-                            "%s already in event queue, updating timestamp to %d", ev_path, newtime)
+                            "%s already in event queue, updating timestamp to %d",
+                            ev_path, newtime)
                         self.events[ev_path] = newtime
                 self.events_lock.release()
 

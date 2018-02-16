@@ -1,39 +1,59 @@
-import os
+import pytest
 
-from mock import patch, call
+from pypdfocr import pypdfocr_pdffiler
+from pypdfocr import pypdfocr_filer_dirs
 
-from pypdfocr import pypdfocr as P
+
+class MockReader:
+    def __init__(self, filepath):
+        self.filepath = filepath
+
+    def getNumPages(self):
+        return 1
+
+    def getPage(self, pgnum):
+        return self
+
+    def extractText(self):
+        with open(self.filepath) as f:
+            return f.read()
 
 
-class TestPDFFiler:
+class TestPDFFiler2:
 
-    @patch('shutil.move')
-    def test_file_by_filename(self, mock_move):
-        """
-            Test filing of single pdf based on filename.
-        """
+    @pytest.fixture
+    def pdffiler(self, tmpdir):
+        """Create an instance of pdffiler with appropriate settings"""
+        filer = pypdfocr_filer_dirs.PyFilerDirs()
+        filer.add_folder_target("keyword", ["keyword", ])
+        filer.default_folder = "default"
+        filer.target_folder = str(tmpdir.join("target"))
+        return pypdfocr_pdffiler.PyPdfFiler(filer)
 
-        # Mock the move function so we don't actually end up filing
-        p = P.PyPDFOCR()
-        filename = os.path.join(os.path.dirname(__file__),
-                                "pdfs",
-                                "test_super_long_keyword.pdf")
-        out_filename = filename.replace(".pdf", "_ocr.pdf")
+    @pytest.fixture(autouse=True)
+    def mock_reader(self, monkeypatch):
+        """Mock the pdf reader to allow reading our txt file instead."""
+        monkeypatch.setattr(
+            "pypdfocr.pypdfocr_pdffiler.PdfFileReader", MockReader)
 
-        if os.path.exists(out_filename):
-            os.remove(out_filename)
+    def test_file_to_default(self, tmpdir, pdffiler):
+        """Test filing a single pdf to the default folder."""
+        infile = tmpdir.join("test.txt")
+        infile.write("Lorum Ipsum")
+        outpath = pdffiler.move_to_matching_folder(str(infile))
+        assert outpath == str(tmpdir.join("target/default/test.txt"))
 
-        print("Current directory: %s" % os.getcwd())
-        conf_path = os.path.join(
-            os.path.dirname(__file__), 'test_pypdfocr_config.yaml')
+    def test_file_by_filename(self, tmpdir, pdffiler):
+        """Test filing a single pdf based on filename."""
+        pdffiler.file_using_filename = True
+        infile = tmpdir.join("keyword.txt")
+        infile.write("Lorum Ipsum")
+        outpath = pdffiler.move_to_matching_folder(str(infile))
+        assert outpath == str(tmpdir.join("target/keyword/keyword.txt"))
 
-        opts = [filename, "--config={}".format(conf_path), "-f", "-n"]
-        p.go(opts)
-
-        assert os.path.exists(out_filename)
-        os.remove(out_filename)
-
-        calls = [call(out_filename, os.path.abspath(
-            os.path.join(
-                'temp', 'target', 'recipe', os.path.basename(out_filename))))]
-        mock_move.assert_has_calls(calls)
+    def test_file_by_keyword(self, tmpdir, pdffiler):
+        """Test filing a single pdf based on keyword."""
+        infile = tmpdir.join("test.txt")
+        infile.write("Lorum Keyword Ipsum")
+        outpath = pdffiler.move_to_matching_folder(str(infile))
+        assert outpath == str(tmpdir.join("target/keyword/test.txt"))

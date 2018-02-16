@@ -44,11 +44,6 @@ class PyPreprocess(object):
             'CV_FAILED': 'convert execution failed', }
         self.threads = config.get('threads', 4)
 
-    @staticmethod
-    def _warn(msg): # pragma: no cover
-        """Print `msg` as warning message"""
-        print("WARNING: %s" % msg)
-
     def cmd(self, cmd_list):
         """Run command as subprocess and return output."""
         if isinstance(cmd_list, list):
@@ -60,8 +55,8 @@ class PyPreprocess(object):
             logging.debug(out)
             return out
         except subprocess.CalledProcessError as err:
-            print(err.output)
-            self._warn("Could not run command %s" % cmd_list)
+            logging.debug(err.output)
+            logging.warning("Could not run command %s", cmd_list)
 
     def _run_preprocess(self, in_filename):
         basename, filext = os.path.splitext(in_filename)
@@ -76,11 +71,17 @@ class PyPreprocess(object):
             'convert',
             '"%s"' % in_filename,
             '-respect-parenthesis',
-            #'\\( $setcspace -colorspace gray -type grayscale \\)',
             backslash + '(',
             '-clone 0',
-            '-colorspace gray -negate -lat 15x15+5% -contrast-stretch 0',
-            backslash + ') -compose copy_opacity -composite -opaque none +matte -modulate 100,100',
+            '-colorspace gray',
+            '-negate',
+            '-lat 15x15+5%',
+            '-contrast-stretch 0',
+            backslash + ')',
+            '-compose copy_opacity',
+            '-composite',
+            '-opaque none +matte',
+            '-modulate 100,100',
             #'-adaptive-blur 1.0',
             '-blur 1x1',
             #'-selective-blur 4x4+5%',
@@ -105,15 +106,15 @@ class PyPreprocess(object):
         pool = Pool(processes=self.threads, initializer=init_worker)
         try:
             logging.info("Starting preprocessing parallel execution")
-            preprocessed_filenames = pool.map(unwrap_self, zip([self]*len(fns), fns))
+            preprocessed_filenames = pool.map(
+                unwrap_self, zip([self]*len(fns), fns))
             pool.close()
         except (KeyboardInterrupt, Exception):
-            print("Caught keyboard interrupt... terminating")
+            logging.error("Caught keyboard interrupt... terminating")
             pool.terminate()
-            #sys,exit(-1)
             raise
         finally:
             pool.join()
-            logging.info("Completed preprocessing")
 
+        logging.info("Completed preprocessing")
         return preprocessed_filenames

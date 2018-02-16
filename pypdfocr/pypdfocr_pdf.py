@@ -286,7 +286,7 @@ class PyPdf(object):
             logging.info("Error loading hocr, not adding any text")
             return
 
-        logging.debug(xml.etree.ElementTree.tostring(hocr.getroot()))
+        # logging.debug(xml.etree.ElementTree.tostring(hocr.getroot()))
         for elem in hocr.getroot():  # Find the <body> tag
             if elem.tag != 'body':
                 continue
@@ -324,7 +324,7 @@ class PyPdf(object):
                 word.text = ' '.join(word_text)
                 if word.text is None:
                     continue
-                logging.debug("word: %s, angle: %d", word.text.strip(), textangle)
+                # logging.debug("word: %s, angle: %d", word.text.strip(), textangle)
 
 
                 box = self.regex_bbox.search(word.attrib['title']).group(1).split()

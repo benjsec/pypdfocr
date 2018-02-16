@@ -27,7 +27,7 @@ import subprocess
 
 def error(text):
     """Print error message and terminate."""
-    print("ERROR: %s" % text)
+    logging.error(text)
     exit(-1)
 
 class PyGs(object):
@@ -59,7 +59,6 @@ class PyGs(object):
                 binary = "gs"
         self.binary = binary
 
-        #self.tiff_dpi = 300
         self.output_dpi = 300
         self.greyscale = True
         # Tiff is used for the ocr, so just fix it at 300dpi
@@ -76,8 +75,6 @@ class PyGs(object):
             'pnm': ['pnm', ['-sDEVICE=pnmraw', '-r%(dpi)s']],
             'pgm': ['pgm', ['-sDEVICE=pgm', '-r%(dpi)s']],
         }
-        self.img_format = None
-        self.img_file_ext = None
 
     def _find_windows_gs(self):
         """
@@ -119,11 +116,6 @@ class PyGs(object):
         if not gs:
             error(self.msgs['GS_MISSING_BINARY'])
 
-    @staticmethod
-    def _warn(msg):
-        """Print warning message"""
-        print("WARNING: %s" % msg)
-
     def _get_dpi(self, pdf_filename):
         if not os.path.exists(pdf_filename):
             error(self.msgs['GS_MISSING_PDF'] + " %s" % pdf_filename)
@@ -132,26 +124,27 @@ class PyGs(object):
         logging.info("Running pdfimages to figure out DPI...")
         logging.debug(cmd)
         try:
-            out = subprocess.check_output(cmd, shell=True)
+            out = subprocess.check_output(
+                cmd, shell=True, universal_newlines=True)
         except subprocess.CalledProcessError:
-            self._warn("Could not execute pdfimages to calculate DPI"
-                       " (try installing xpdf or poppler?), so defaulting"
-                       " to %sdpi" % self.output_dpi)
+            logging.warning("Could not execute pdfimages to calculate DPI"
+                            " (try installing xpdf or poppler?), so defaulting"
+                            " to %sdpi", self.output_dpi)
             return
 
         # Need the second line of output
         # Make sure it exists (in case this is an empty pdf)
         results = out.splitlines()
         if len(results) < 3:
-            self._warn("Empty pdf, cannot determine dpi using pdfimages")
+            logging.warning("Empty pdf, cannot determine dpi using pdfimages")
             return
         results = results[2]
         logging.debug(results)
         results = results.split()
         if results[2] != 'image':
-            self._warn("Could not understand output of pdfimages, "
-                       "please rerun with -d option and file an issue at "
-                       "http://github.com/virantha/pypdfocr/issues")
+            logging.warning("Could not understand output of pdfimages, "
+                            "please rerun with -d option and file an issue at"
+                            " http://github.com/virantha/pypdfocr/issues")
             return
         x_pt, y_pt, greyscale = \
             int(results[3]), int(results[4]), results[5] == 'gray'
@@ -160,32 +153,25 @@ class PyGs(object):
         # Now, run imagemagick identify to get pdf width/height/density
         cmd = 'identify -format "%%w %%x %%h %%y\n" "%s"' % pdf_filename
         try:
-            out = subprocess.check_output(cmd, shell=True)
-            results = out.splitlines()[0]
-            results = results.replace("Undefined", "")
-            width, xdensity, height, ydensity = [float(x) for x in results.split()]
-            xdpi = round(x_pt/width*xdensity)
-            ydpi = round(y_pt/height*ydensity)
-            self.output_dpi = xdpi
-            if ydpi > xdpi:
-                self.output_dpi = ydpi
-            if self.output_dpi < 300:
-                self.output_dpi = 300
-            if abs(xdpi-ydpi) > xdpi*.05:  # Make sure the two dpi's are within 5%
-                self._warn("X-dpi is %d, Y-dpi is %d, defaulting to %d" %
-                           (xdpi, ydpi, self.output_dpi))
-            else:
-                print("Using %d DPI" % self.output_dpi)
-
-
-        except Exception as err:
+            out = subprocess.check_output(
+                cmd, shell=True, universal_newlines=True)
+        except subprocess.CalledProcessError as err:
             logging.debug(str(err))
-            self._warn("Could not execute identify to calculate DPI"
-                       " (try installing imagemagick?), so defaulting to"
-                       " %sdpi" % self.output_dpi)
-        return
-
-
+            logging.warning("Could not execute identify to calculate DPI"
+                            " (try installing imagemagick?), so defaulting to"
+                            " %sdpi", self.output_dpi)
+            return
+        results = out.splitlines()[0]
+        results = results.replace("Undefined", "")
+        width, xdensity, height, ydensity = [float(x) for x in results.split()]
+        xdpi = round(x_pt/width*xdensity)
+        ydpi = round(y_pt/height*ydensity)
+        self.output_dpi = max(xdpi, ydpi, 300)
+        if abs(xdpi-ydpi) > xdpi*.05:  # Make sure the two dpi's are within 5%
+            logging.warning("DPI mismatch: X:%d, Y:%d, defaulting to %d",
+                            xdpi, ydpi, self.output_dpi)
+        else:
+            logging.info("Using %d DPI", self.output_dpi)
 
     def _run_gs(self, options, output_filename, pdf_filename):
         try:
@@ -195,45 +181,39 @@ class PyGs(object):
             subprocess.check_output(cmd, shell=True, universal_newlines=True)
 
         except subprocess.CalledProcessError as err:
-            print(err.output)
+            logging.error(err.output)
             if "undefined in .getdeviceparams" in err.output:
                 error(self.msgs['GS_OUTDATED'])
             else:
                 error(self.msgs['GS_FAILED'])
 
-
     def make_img_from_pdf(self, pdf_filename):
         """Convert pdf to jpg"""
         self._get_dpi(pdf_filename) # No need to bother anymore
 
-        if not os.path.exists(pdf_filename):
-            error(self.msgs['GS_MISSING_PDF'] + " %s" % pdf_filename)
-
         filename = os.path.splitext(pdf_filename)[0]
-
 
         # Create ancillary jpeg files to use later to calculate image dpi etc
         #   We no longer use these for the final image. Instead the text is merged
         #   directly with the original PDF.  Yay!
         if self.greyscale:
-            self.img_format = 'jpggrey'
-            #self.img_format = 'pnggrey'
+            img_format = 'jpggrey'
             logging.info("Detected greyscale")
         else:
-            self.img_format = 'jpg'
-            #self.img_format = 'png'
+            img_format = 'jpg'
             logging.info("Detected color")
 
-        self.img_file_ext = self.gs_options[self.img_format][0]
+        img_file_ext = self.gs_options[img_format][0]
 
         # The possible output files glob
-        globable_filename = '%s_*.%s' % (filename, self.img_file_ext)
+        globable_filename = '%s_*.%s' % (filename, img_file_ext)
         # Delete any img files already existing
-        for filename in glob.glob(globable_filename):
-            os.remove(filename)
+        for fname in glob.glob(globable_filename):
+            os.remove(fname)
 
-        options = ' '.join(self.gs_options[self.img_format][1]) % {'dpi':self.output_dpi}
-        output_filename = '%s_%%d.%s' % (filename, self.img_file_ext)
+        options = ' '.join(self.gs_options[img_format][1]) % {'dpi':self.output_dpi}
+        output_filename = '%s_%%d.%s' % (filename, img_file_ext)
+        logging.debug(output_filename)
         self._run_gs(options, output_filename, pdf_filename)
         for filename in glob.glob(globable_filename):
             logging.info("Created image %s", filename)

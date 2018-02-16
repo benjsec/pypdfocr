@@ -18,7 +18,6 @@
 
 import os
 import sys
-# import multiprocessing
 
 # Special work-around to support multiprocessing and pyinstaller --onefile on windows systms
 # https://github.com/pyinstaller/pyinstaller/wiki/Recipe-Multiprocessing
@@ -32,14 +31,14 @@ except ImportError:
     import multiprocessing.forking as forking
 
 
-class _Popen(forking.Popen):
+class Popen(forking.Popen):
     def __init__(self, *args, **kw):
         if hasattr(sys, 'frozen'):
             # We have to set original _MEIPASS2 value from sys._MEIPASS
             # to get --onefile mode working.
             os.putenv('_MEIPASS2', sys._MEIPASS)
         try:
-            super(_Popen, self).__init__(*args, **kw)
+            super(Popen, self).__init__(*args, **kw)
         finally:
             if hasattr(sys, 'frozen'):
                 # On some platforms (e.g. AIX) 'os.unsetenv()' is not
@@ -51,4 +50,4 @@ class _Popen(forking.Popen):
                 else:
                     os.putenv('_MEIPASS2', '')
 
-forking.Popen = _Popen
+# forking.Popen = _Popen

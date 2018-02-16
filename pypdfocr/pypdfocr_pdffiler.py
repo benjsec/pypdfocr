@@ -36,17 +36,16 @@ class PyPdfFiler(object):
         # Whether to fall back on filename for matching keywords against
         # if there is no match in the text
         self.file_using_filename = False
-        self.filename = None
+        self.file_original = self.filer.file_original
 
-    def iter_pdf_page_text(self, filename):
+    @staticmethod
+    def iter_pdf_page_text(filename):
         """Generator to return text from a pdf file."""
-        self.filename = filename
         reader = PdfFileReader(filename)
         logging.info("pdf scanner found %d pages in %s",
                      reader.getNumPages(), filename)
         for pgnum in range(reader.getNumPages()):
             text = reader.getPage(pgnum).extractText()
-            # text = text.encode('ascii', 'ignore')
             text = text.replace('\n', ' ')
             yield text
 
@@ -60,10 +59,6 @@ class PyPdfFiler(object):
                     return folder
         # No match found, so return
         return None
-
-    def file_original(self, original_filename):
-        """Use the filer to file the original."""
-        return self.filer.file_original(original_filename)
 
     def move_to_matching_folder(self, filename):
         """File the original based on keyword matching in text body."""
