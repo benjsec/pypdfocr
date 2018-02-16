@@ -101,12 +101,10 @@ class TestGS:
     def test_function_hi_dpi(self, pygs, asset_dir, caplog):
         pygs._get_dpi(os.path.join(asset_dir, "test_sherlock.pdf"))
         assert pygs.output_dpi == 400
-        assert "400 DPI" in caplog.text
 
     def test_function_low_dpi(self, pygs, asset_dir, caplog):
         pygs._get_dpi(os.path.join(asset_dir, "test_patent.pdf"))
         assert pygs.output_dpi == 300
-        assert "300 DPI" in caplog.text
 
     def test_functional_mismatched_dpi(self, pygs, asset_dir, caplog):
         pygs._get_dpi(os.path.join(asset_dir, "test.pdf"))
