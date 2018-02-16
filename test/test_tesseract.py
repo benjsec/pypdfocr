@@ -104,9 +104,7 @@ class TestTesseract:
         pyts = pypdfocr_tesseract.PyTesseract({})
         pyts._ts_version = "4.01"
         assert 'tesseract.exe' in pyts.binary
-
-        mock_os_path_exists.return_value = True
-        mock_uptodate.return_value = (True, "")
+        
         # force a bad tesseract on windows
         pyts.binary = "blah"
         with pytest.raises(SystemExit):
