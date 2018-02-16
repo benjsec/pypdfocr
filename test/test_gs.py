@@ -27,7 +27,7 @@ class TestGS:
     @pytest.mark.skipif(os.name != 'nt', reason="Not on NT")
     @patch('os.name')
     @patch('subprocess.call')
-    def test_gs_run_nt(self, mock_subprocess, mock_os_name, capsys):
+    def test_gs_run_nt(self, mock_subprocess, mock_os_name, caplog):
         """
             Stupid test because Windows Tesseract only returns 3.02 instead
             of 3.02.02
@@ -40,8 +40,7 @@ class TestGS:
         with pytest.raises(SystemExit):
             p._run_gs("", "", "")
 
-        out, err = capsys.readouterr()
-        assert p.msgs['GS_FAILED'] in out
+        assert p.msgs['GS_FAILED'] in caplog.text
 
     @pytest.fixture
     def pygs(self):

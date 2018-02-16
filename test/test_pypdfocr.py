@@ -123,15 +123,18 @@ class TestPydfocr:
         infile = os.path.join(asset_dir, test_spec.filename)
         conffile = tmpdir.join("test.conf")
         conffile.write("""
-            target_folder: "{dirpath}/target"
-            default_folder: "{dirpath}/target/default"
+            target_folder: '{target_folder}'
+            default_folder: '{default_folder}'
 
             folders:
                 recipe:
                     - recipes
                 patents:
                     - patent
-            """.format(dirpath=str(tmpdir)))
+            """.format(
+                target_folder=os.path.join(str(tmpdir), 'target'),
+                default_folder=os.path.join(str(tmpdir), 'target', 'default')))
+
         opts = [infile, '--skip-preprocess', "--config", str(conffile), "-f"]
         pdfocr.go(opts)
 
@@ -152,16 +155,19 @@ class TestPydfocr:
         infile = os.path.join(asset_dir, test_spec.filename)
         conffile = tmpdir.join("test.conf")
         conffile.write("""
-            target_folder: "{dirpath}/target"
-            default_folder: "{dirpath}/target/default"
-            original_move_folder: "{dirpath}/original"
+            target_folder: '{target_folder}'
+            default_folder: '{default_folder}'
+            original_move_folder: '{original_folder}'
 
             folders:
                 recipe:
                     - recipes
                 patents:
                     - patent
-            """.format(dirpath=str(tmpdir)))
+            """.format(
+                target_folder=os.path.join(str(tmpdir), 'target'),
+                default_folder=os.path.join(str(tmpdir), 'target', 'default'),
+                original_folder=os.path.join(str(tmpdir), 'original')))
 
         opts = [infile, "--config", str(conffile), "-f"]
         pdfocr.go(opts)

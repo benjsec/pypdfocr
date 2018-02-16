@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 
 import pytest
 import mock
@@ -71,7 +72,7 @@ class TestTesseract:
 
     def test_override_binary(self):
         pyts = pypdfocr_tesseract.PyTesseract({'binary': '/foo/bar/bin'})
-        assert pyts.binary == '/foo/bar/bin'
+        assert '/foo/bar/bin' in pyts.binary
 
     def test_override_binary_nt(self, monkeypatch):
         monkeypatch.setattr("os.name", "nt")
@@ -97,33 +98,34 @@ class TestTesseract:
         pyts = pypdfocr_tesseract.PyTesseract({})
         pyts.assert_version()
 
-    def test_force_Nt(self, monkeypatch):
+    def test_force_Nt(self, monkeypatch, tmpdir):
         monkeypatch.setattr('os.name', 'nt')
         monkeypatch.setattr('os.path.exists', mock.Mock(return_value=True))
-
         pyts = pypdfocr_tesseract.PyTesseract({})
         pyts._ts_version = "4.01"
         assert 'tesseract.exe' in pyts.binary
 
+        mock_os_path_exists.return_value = True
+        mock_uptodate.return_value = (True, "")
         # force a bad tesseract on windows
         pyts.binary = "blah"
         with pytest.raises(SystemExit):
-            pyts.make_hocr_from_pnm('blah.tiff')
+            pyts.make_hocr_from_pnm(str(tmpdir.join('blah.tiff')))
 
-    def test_tesseract_fail(self, caplog, monkeypatch):
+    def test_tesseract_fail(self, caplog, monkeypatch, tmpdir):
         """
             Get all the checks passed and make sure we report the case where
             tesseract returns a non-zero status.
         """
         monkeypatch.setattr('os.name', 'nt')
         monkeypatch.setattr('os.path.exists', mock.Mock(return_value=True))
-        monkeypatch.setattr('subprocess.call', mock.Mock(return_value=-1))
+        monkeypatch.setattr('subprocess.check_output', mock.Mock(side_effect=subprocess.CalledProcessError(-1 , 'Boom')))
         pyts = pypdfocr_tesseract.PyTesseract({})
         pyts._ts_version = "4.01"
         assert 'tesseract.exe' in pyts.binary
 
         with pytest.raises(SystemExit):
-            pyts.make_hocr_from_pnm('blah.tiff')
+            pyts.make_hocr_from_pnm(str(tmpdir.join('blah.tiff')))
         assert pyts.msgs['TS_FAILED'] in caplog.text
 
     @pytest.mark.parametrize(
@@ -141,6 +143,7 @@ class TestTesseract:
         pyts._ts_version = version
         assert pyts.make_hocr_from_pnm('foo.tiff') == 'foo.{}'.format(ext)
 
+    @pytest.mark.skipif(os.name=='nt', reason='Stalls on Windows')
     def test_make_hocrs_pool(self, monkeypatch, pyts):
         """Test parsing multiple tiff in a batch.
 
