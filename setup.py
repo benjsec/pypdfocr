@@ -14,11 +14,8 @@ class PyTest(Command):
     def finalize_options(self):
         pass
     def run(self):
-        import sys,subprocess
-        cwd = os.getcwd()
-        os.chdir('test')
-        errno = subprocess.call([sys.executable, 'runtests.py'])
-        os.chdir(cwd)
+        import sys, subprocess
+        errno = subprocess.call([sys.executable, '-m', 'pytest', 'test', '--verbose'])
         raise SystemExit(errno)
 
 def read(*filenames, **kwargs):

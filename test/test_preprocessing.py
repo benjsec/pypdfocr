@@ -45,7 +45,7 @@ def test_infile_missing(pypre):
 def test_keyboard_interrupt(pypre, monkeypatch, caplog):
     """Exceptions should be logged and re-raised"""
     monkeypatch.setattr(
-        'subprocess.check_output',
+        pypre, 'cmd',
         mock.Mock(side_effect=Exception("Boom!")))
     with pytest.raises(Exception):
         pypre.preprocess(['foo.jpg'])

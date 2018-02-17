@@ -1,0 +1,74 @@
+version: 1.0.{build}
+
+image: Visual Studio 2017
+
+environment:
+
+  matrix:
+
+    # For Python versions available on Appveyor, see
+    # http://www.appveyor.com/docs/installed-software#python
+    # The list here is complete (excluding Python 2.6, which
+    # isn't covered by this document) at the time of writing.
+
+    - PYTHON: "C:\\Python27"
+    - PYTHON: "C:\\Python35"
+    - PYTHON: "C:\\Python36"
+    - PYTHON: "C:\\Python27-x64"
+    - PYTHON: "C:\\Python35-x64"
+    - PYTHON: "C:\\Python36-x64"
+ 
+init:
+  - echo "%PYTHON% %PYTHON_VERSION% %PYTHON_ARCH%"
+
+install:
+  # Install dependencies
+  - cinst ghostscript imagemagick
+  # Not sure why imagemagick doesn't seem to be appearing on path automatically. TODO: Fix this hack
+  - ps: $env:Path += ";${env:ProgramFiles}\ImageMagick-7.0.7-Q16\"
+  # Install tesseract 3.05
+  - ps: $exePath = "$env:TEMP\tesseract-ocr.exe"
+  - ps: appveyor DownloadFile https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-setup-3.05.01.exe -FileName $exePath
+  - ps: cmd /c start /wait $exePath /S
+  # Install poppler
+  - ps: $zipPath = "$env:TEMP\poppler.7z"
+  - ps: appveyor DownloadFile http://blog.alivate.com.au/wp-content/uploads/2017/01/poppler-0.51_x86.7z -FileName $zipPath
+  - ps: $binPath = "${env:ProgramFiles(x86)}\Poppler\"
+  - ps: 7z e $zipPath "-o$binPath"
+  - ps: $env:Path += ";${binPath}"
+  # Install python dependencies
+  - "%PYTHON%\\python.exe -m pip install -r requirements.txt"
+  - "%PYTHON%\\python.exe -m pip install pytest mock pytest-catchlog"
+  - "%PYTHON%\\python.exe -m pip install ."
+
+
+build: off
+
+test_script:
+  - ps: echo $env:Path
+#  - ps: cmd pdfimages -v
+#  - ps: cmd magick -version
+  # Put your test command here.
+  # If you don't need to build C extensions on 64-bit Python 3.3 or 3.4,
+  # you can remove "build.cmd" from the front of the command, as it's
+  # only needed to support those cases.
+  # Note that you must use the environment variable %PYTHON% to refer to
+  # the interpreter you're using - Appveyor does not do anything special
+  # to put the Python version you want to use on PATH.
+  - "%PYTHON%\\python.exe setup.py test"
+
+# after_test:
+  # This step builds your wheels.
+  # Again, you only need build.cmd if you're building C extensions for
+  # 64-bit Python 3.3/3.4. And you need to use %PYTHON% to get the correct
+  # interpreter
+  # - "build.cmd %PYTHON%\\python.exe setup.py bdist_wheel"
+
+# artifacts:
+  # bdist_wheel puts your built wheel in the dist directory
+  # - path: dist\*
+
+#on_success:
+#  You can use this step to upload your artifacts to a public website.
+#  See Appveyor's documentation for more details. Or you can simply
+#  access your wheels from the Appveyor "artifacts" tab for your build.

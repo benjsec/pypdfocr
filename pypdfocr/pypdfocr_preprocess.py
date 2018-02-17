@@ -93,6 +93,8 @@ class PyPreprocess(object):
             # vertical lines in a table)
             '"%s"' % (out_filename)
             ]
+        if str(os.name) == 'nt':
+            cmd_list = ['magick'] + cmd_list
         logging.info("Preprocessing image %s for better OCR", in_filename)
         res = self.cmd(cmd_list)
         if res is None:
@@ -117,4 +119,5 @@ class PyPreprocess(object):
             pool.join()
 
         logging.info("Completed preprocessing")
+        logging.debug("Output filenames: %s", preprocessed_filenames)
         return preprocessed_filenames
