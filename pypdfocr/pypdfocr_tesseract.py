@@ -25,7 +25,7 @@ import subprocess
 import sys
 
 from multiprocessing import Pool
-from pkg_resources import parse_version
+from packaging import version
 from .pypdfocr_interrupts import init_worker
 
 
@@ -115,7 +115,7 @@ class PyTesseract(object):
 
     def assert_version(self):
         """Raise an exception if the tesseract version is too old."""
-        if parse_version(self.required) > parse_version(self.ts_version):
+        if version.parse(self.required) > version.parse(self.ts_version):
             raise TesseractException(
                 "Tesseract version too old. Required {} Found {}".format(
                 self.required, self.ts_version))
@@ -157,7 +157,7 @@ class PyTesseract(object):
     def make_hocr_from_pnm(self, img_filename):
         """Run OCR on single file."""
         basename = os.path.splitext(img_filename)[0]
-        if parse_version(self.ts_version) < parse_version("3.03"):
+        if version.parse(self.ts_version) < version.parse("3.03"):
             # Output format is html for old versions of tesseract
             hocr_filename = "%s.html" % basename
         else:
