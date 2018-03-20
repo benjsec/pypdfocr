@@ -98,6 +98,12 @@ class TestTesseract:
         pyts = pypdfocr_tesseract.PyTesseract({})
         pyts.assert_version()
 
+    def test_tesseract_4alpha(self, monkeypatch, tmpdir):
+        monkeypatch.setattr('subprocess.check_output',
+                            mock.Mock(return_value="tesseract 4.00.00alpha"))
+        pyts = pypdfocr_tesseract.PyTesseract({})
+        pyts.assert_version()
+
     def test_force_Nt(self, monkeypatch, tmpdir):
         monkeypatch.setattr('os.name', 'nt')
         monkeypatch.setattr('os.path.exists', mock.Mock(return_value=True))
