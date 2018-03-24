@@ -1,14 +1,20 @@
+os:
+  - linux
+  - osx
+
 language: python
 python:
     - "2.7"
     - "3.5"
     - "3.6"
 before_install:
-    - sudo apt-get -qq update
-    - sudo apt-get install -y tesseract-ocr ghostscript imagemagick poppler-utils
+    - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
+    - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install tesseract ghostscript poppler imagemagick; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get -qq update; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y tesseract-ocr ghostscript imagemagick poppler-utils; fi
 install: 
     - "pip install -r requirements.txt"
-    - "pip install pytest mock pytest-catchlog"
+    - "pip install pytest mock"
     - "pip install ."
 script: 
     - "pytest test"
