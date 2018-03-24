@@ -1,6 +1,13 @@
 [report]
+
+show_missing = True
+
 exclude_lines = 
 
     pragma: no cover
     if __name__ == '__main__':
     def error(text):
+    def __repr__
+    if self\.degub
+    raise AssertionError
+    raise NotImplementedError
