@@ -1,6 +1,16 @@
 import os
+import sys
+
+import pytest
 
 from pypdfocr import pypdfocr_filer
+
+
+if sys.version_info.major == 2:
+    @pytest.fixture(autouse=True)
+    def inst_pyfiler(monkeypatch):
+        monkeypatch.setattr(
+            pypdfocr_filer.PyFiler, "__abstractmethods__", set())
 
 
 def test_class_methods():
@@ -33,8 +43,8 @@ def test_split_filename():
 
 def test_get_filename(tmpdir):
     pf = pypdfocr_filer.PyFiler()
-    fpath = tmpdir.join("file.ext")
-    newpath = pf._get_unique_filename_by_appending_version_integer(str(fpath))
+    fpath = str(tmpdir.join("file.ext"))
+    newpath = pf._get_unique_filename_by_appending_version_integer(fpath)
     assert newpath == fpath
 
 
@@ -44,11 +54,11 @@ def test_get_filename_conflict(tmpdir):
     fpath.write("foobar")
     newpath = pf._get_unique_filename_by_appending_version_integer(str(fpath))
     assert newpath != fpath
-    assert os.path.split(newpath)[0] == os.path.split(fpath)[0]
-    assert os.path.splitext(newpath)[1] == os.path.splitext(fpath)[1]
+    assert os.path.split(newpath)[0] == os.path.split(str(fpath))[0]
+    assert os.path.splitext(newpath)[1] == os.path.splitext(str(fpath))[1]
 
 
-def test_get_filename_conflict2(tmpdir):
+def test_get_filename_conflict2(monkeypatch, tmpdir):
     pf = pypdfocr_filer.PyFiler()
     fnames = ["file.ext", "file_1.ext", "file_2.ext"]
     fpaths = [tmpdir.join(fname) for fname in fnames]
@@ -57,5 +67,5 @@ def test_get_filename_conflict2(tmpdir):
     newpath = pf._get_unique_filename_by_appending_version_integer(
         str(fpaths[0]))
     assert newpath not in fpaths
-    assert os.path.split(newpath)[0] == os.path.split(fpath)[0]
-    assert os.path.splitext(newpath)[1] == os.path.splitext(fpath)[1]
+    assert os.path.split(newpath)[0] == os.path.split(str(fpaths[0]))[0]
+    assert os.path.splitext(newpath)[1] == os.path.splitext(str(fpaths[0]))[1]
