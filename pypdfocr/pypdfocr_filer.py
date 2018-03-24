@@ -35,9 +35,10 @@ class PyFiler(object):
     @abc.abstractmethod
     def move_to_matching_folder(self, filename, **kwargs):
         """ Move the file given by filename to the proper location.
-            You will need to use :py:attr:`target_folder` and :py:attr:`folder_targets`
-            to figure out what the proper destination is.  If there is no matching location,
-            then use :py:attr:`default_folder`
+            You will need to use :py:attr:`target_folder` and
+            :py:attr:`folder_targets` to figure out what the proper
+            destination is.  If there is no matching location, then use
+            :py:attr:`default_folder`.
 
             :param filename: File to move
             :type filename: string
@@ -52,7 +53,8 @@ class PyFiler(object):
 
             :param original_filename: File to move
             :type original_filename: string
-            :returns: Full path+filename of destination(original_filename if not moved)
+            :returns: Full path+filename of destination(original_filename if
+               not moved)
             :rtype: string
         """
 
