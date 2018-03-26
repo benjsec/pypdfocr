@@ -44,35 +44,3 @@ class Retry(object):
                     raise err
 
         return val
-
-
-
-class ExecutableSearcher(object):
-    """Base class for cross-platform executable searchers"""
-    pass
-
-
-class WindowsExecutableSearcher(ExecutableSearcher):
-
-    def __init__(self, possible_dir_names, possible_exe_names):
-        """
-
-        """
-        if not exe_name.endswith('exe'):
-            self.exe_name = exe_name+'.exe'
-        else:
-            self.exe_name = exe_name
-
-    def find(self, root):
-        """
-            Search below root for the given executable
-        """
-        found_exe = self.exe_name
-
-        if os.path.exists(root):
-            cwd = os.getcwd()
-            os.chdir(root)
-            for root, dirs, files in os.walk('.', topdown=True):
-                pass
-
-        return found_exe
