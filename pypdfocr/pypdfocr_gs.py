@@ -20,6 +20,7 @@
     Wrap ghostscript calls.  Yes, this is ugly.
 """
 
+import fnmatch
 import glob
 import logging
 import os
@@ -46,9 +47,7 @@ class PyGs(object):
 
         if "binary" in config:  # Override location of binary
             binary = config['binary']
-            if os.name == 'nt':
-                binary = '"%s"' % binary
-                binary = binary.replace("\\", "\\\\")
+            binary = os.path.abspath(binary)
             logging.info("Setting location for executable to %s", binary)
         else:
             if str(os.name) == 'nt':
@@ -77,44 +76,22 @@ class PyGs(object):
         }
 
     def _find_windows_gs(self):
-        """
-            Searches through the Windows program files directories to find Ghostscript.
-            If it finds multiple versions, it does a naive sort for now to find the most
-            recent.
+        """Return ghostscript executable path for Windows.
 
-            :rval: The ghostscript binary location
+        Searches through the Windows program files directories to find 
+        Ghostscript. If multiple versions are found the most recent is
+        returned, favouring x64 over x86.
+
+        :rval: String representation of ghostscript binary location.
 
         """
         windirs = ["c:\\Program Files\\gs", "c:\\Program Files (x86)\\gs"]
-        gs = None
-        for d in windirs:
-            if not os.path.exists(d):
-                continue
-            cwd = os.getcwd()
-            os.chdir(d)
-            listing = os.listdir('.')
-
-            # Find all possible gs* sub-directories
-            listing = [x for x in listing if x.startswith('gs')]
-
-            # TODO: Make this a natural sort
-            listing.sort(reverse=True)
-            for bindir in listing:
-                binpath = os.path.join(bindir, 'bin')
-                if not os.path.exists(binpath):
-                    continue
-                os.chdir(binpath)
-                # Look for gswin64c.exe or gswin32c.exe (the c is for the command-line version)
-                gswin = glob.glob('gswin*c.exe')
-                if len(gswin) == 0:
-                    continue
-                # Just use the first found .exe (Do i need to do anything more complicated here?)
-                gs = os.path.abspath(gswin[0])
-                os.chdir(cwd)
-                return gs
-
-        if not gs:
-            error(self.msgs['GS_MISSING_BINARY'])
+        for dpath in windirs:
+            for base, dirs, files in os.walk(dpath):
+                bin_paths = fnmatch.filter(files, "gswin*c.exe")
+                if bin_paths:
+                    return os.path.join(base, max(bin_paths))
+        error(self.msgs['GS_MISSING_BINARY'])
 
     def _get_dpi(self, pdf_filename):
         if not os.path.exists(pdf_filename):

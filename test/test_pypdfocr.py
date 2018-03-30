@@ -195,12 +195,10 @@ class TestPydfocr:
                 binary: /usr/bin/tesseract
             """)
         pdfocr.config = pdfocr.get_options(['foo.pdf', '-c', str(conffile)])
-        # pdfocr.config["tesseract"] = {"binary":"/usr/bin/tesseract"}
-        # pdfocr.config["ghostscript"] = {"binary":"/usr/bin/ghostscript"}
         pdfocr._setup_external_tools()
         if not os.name == 'nt':
             assert pdfocr.ts.binary == "/usr/bin/tesseract"
             assert pdfocr.gs.binary == "/usr/bin/ghostscript"
         else:
             assert pdfocr.ts.binary == '"/usr/bin/tesseract"'
-            assert pdfocr.gs.binary == '"/usr/bin/ghostscript"'
+            assert pdfocr.gs.binary == "C:\\usr\\bin\\ghostscript"
