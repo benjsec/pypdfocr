@@ -104,6 +104,17 @@ class TestGS:
         pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
         assert "not execute" in caplog.text
 
+    def test_imagemagick_failed(self, pygs, asset_dir, monkeypatch, caplog):
+        """Test default DPI is used if imagemagick failes to run."""
+        monkeypatch.setattr(
+            'subprocess.check_output',
+            mock.Mock(side_effect=[
+                "_\n_\n_ _ image 5 5 gray",
+                subprocess.CalledProcessError(returncode=2,cmd=['bad'])]))
+        pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
+        assert "try installing imagemagick" in caplog.text
+        assert pygs.output_dpi == 300
+
     def test_empty_pdf(self, pygs, asset_dir, caplog):
         pygs._get_dpi(os.path.join(asset_dir, "blank.pdf"))
         assert "Empty pdf" in caplog.text
@@ -154,6 +165,11 @@ class TestGS:
     def test_functional_make_img(self, pygs, asset_dir):
         out = pygs.make_img_from_pdf(os.path.join(asset_dir, "test.pdf"))
         assert out == (300, os.path.join(asset_dir, "test_*.jpg"))
+
+    def test_functional_greyscale(self, pygs, asset_dir):
+        out = pygs.make_img_from_pdf(
+            os.path.join(asset_dir, "test_sherlock.pdf"))
+        assert out[1] == os.path.join(asset_dir, "test_sherlock_*.jpg")
 
     def test_existing_img(self, pygs, asset_dir):
         """Existing jpg files in folder should be removed."""
