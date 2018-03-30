@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-
 """
     Wrap ghostscript calls.  Yes, this is ugly.
 """
@@ -26,10 +24,12 @@ import logging
 import os
 import subprocess
 
+
 def error(text):
     """Print error message and terminate."""
     logging.error(text)
     exit(-1)
+
 
 class PyGs(object):
     """Class to wrap all the ghostscript calls"""
@@ -41,7 +41,8 @@ class PyGs(object):
             'GS_OUTDATED': 'Your Ghostscript version is probably out of date.'
                            '  Please upgrade to the latest version',
             'GS_MISSING_BINARY': 'Could not find Ghostscript in the usual'
-                                 ' place; please specify it using your config file',
+                                 ' place; please specify it using your config'
+                                 ' file',
             }
         self.threads = config.get('threads', 4)
 
@@ -61,12 +62,14 @@ class PyGs(object):
         self.output_dpi = 300
         self.greyscale = True
         # Tiff is used for the ocr, so just fix it at 300dpi
-        #  The other formats will be used to create the final OCR'ed image, so determine
-        #  the DPI by using pdfimages if available, o/w default to 200
+        #  The other formats will be used to create the final OCR'ed image,
+        #  so determine the DPI by using pdfimages if available, o/w default
+        #  to 200.
         self.gs_options = {
             'tiff': ['tiff', ['-sDEVICE=tiff24nc', '-r%(dpi)s']],
             'jpg': ['jpg', ['-sDEVICE=jpeg', '-dJPEGQ=75', '-r%(dpi)s']],
-            'jpggrey': ['jpg', ['-sDEVICE=jpeggray', '-dJPEGQ=75', '-r%(dpi)s']],
+            'jpggrey': [
+                'jpg', ['-sDEVICE=jpeggray', '-dJPEGQ=75', '-r%(dpi)s']],
             'png': ['png', ['-sDEVICE=png16m', '-r%(dpi)s']],
             'pnggrey': ['png', ['-sDEVICE=pngmono', '-r%(dpi)s']],
             'tifflzw': ['tiff', ['-sDEVICE=tifflzw', '-r%(dpi)s']],
@@ -78,7 +81,7 @@ class PyGs(object):
     def _find_windows_gs(self):
         """Return ghostscript executable path for Windows.
 
-        Searches through the Windows program files directories to find 
+        Searches through the Windows program files directories to find
         Ghostscript. If multiple versions are found the most recent is
         returned, favouring x64 over x86.
 
@@ -130,7 +133,8 @@ class PyGs(object):
         # Now, run imagemagick identify to get pdf width/height/density
 
         if os.name == 'nt':
-            cmd = 'magick identify -format "%%w %%x %%h %%y\\n" "%s"' % pdf_filename
+            cmd = ('magick identify -format "%%w %%x %%h %%y\\n" "%s"'
+                   % pdf_filename)
         else:
             cmd = 'identify -format "%%w %%x %%h %%y\n" "%s"' % pdf_filename
         try:
@@ -170,13 +174,13 @@ class PyGs(object):
 
     def make_img_from_pdf(self, pdf_filename):
         """Convert pdf to jpg"""
-        self._get_dpi(pdf_filename) # No need to bother anymore
+        self._get_dpi(pdf_filename)  # No need to bother anymore
 
         filename = os.path.splitext(pdf_filename)[0]
 
         # Create ancillary jpeg files to use later to calculate image dpi etc
-        #   We no longer use these for the final image. Instead the text is merged
-        #   directly with the original PDF.  Yay!
+        #   We no longer use these for the final image. Instead the text is
+        #   merged directly with the original PDF.  Yay!
         if self.greyscale:
             img_format = 'jpggrey'
             logging.info("Detected greyscale")
@@ -192,7 +196,8 @@ class PyGs(object):
         for fname in glob.glob(globable_filename):
             os.remove(fname)
 
-        options = ' '.join(self.gs_options[img_format][1]) % {'dpi':self.output_dpi}
+        options = (' '.join(self.gs_options[img_format][1])
+                   % {'dpi': self.output_dpi})
         output_filename = '%s_%%d.%s' % (filename, img_file_ext)
         logging.debug(output_filename)
         self._run_gs(options, output_filename, pdf_filename)

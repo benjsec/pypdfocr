@@ -2,12 +2,10 @@ import os
 import pytest
 import shutil
 import subprocess
-import sys
 
 from pypdfocr import pypdfocr_gs as P
 from pypdfocr import pypdfocr_gs
 
-from mock import patch
 import mock
 
 
@@ -87,8 +85,8 @@ class TestGS:
     def test_get_dpi_fail(self, pygs, asset_dir, monkeypatch, caplog):
         monkeypatch.setattr(
             'subprocess.check_output',
-            mock.Mock(side_effect=subprocess.CalledProcessError(returncode=2,
-                                                                cmd=['bad'])))
+            mock.Mock(side_effect=subprocess.CalledProcessError(
+                returncode=2, cmd=['bad'])))
         pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
         assert "not execute" in caplog.text
 
@@ -98,7 +96,7 @@ class TestGS:
             'subprocess.check_output',
             mock.Mock(side_effect=[
                 "_\n_\n_ _ image 5 5 gray",
-                subprocess.CalledProcessError(returncode=2,cmd=['bad'])]))
+                subprocess.CalledProcessError(returncode=2, cmd=['bad'])]))
         pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
         assert "try installing imagemagick" in caplog.text
         assert pygs.output_dpi == 300
@@ -108,13 +106,11 @@ class TestGS:
         assert "Empty pdf" in caplog.text
 
     def test_pdfimages_malformed_output(
-        self, pygs, asset_dir, monkeypatch, caplog):
+            self, pygs, asset_dir, monkeypatch, caplog):
         """This isn't a good test - should make a better one"""
         monkeypatch.setattr("subprocess.check_output",
                             mock.Mock(return_value="0\n1\n2 3 None"))
-        """
-        1     0 image    1692  2194  icc     1   8  jpeg   no         8  0   200   201  228K 6.3%
-        """
+        # 1 0 image 1692 2194 icc 1 8 jpeg no 8 0 200 201 228K 6.3%
         pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
         assert "Could not understand" in caplog.text
 
