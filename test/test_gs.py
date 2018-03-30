@@ -20,6 +20,11 @@ class TestWin:
         pygs = P.PyGs({'binary': "C:\\tools\\foo\\gs.exe"})
         assert pygs.binary == os.path.join("C:\\", "tools", "foo", "gs.exe")
 
+    def test_find_gs_binary(self):
+        """Test finding GS exe."""
+        pygs = P.PyGs({})
+        assert "gswin" in pygs.binary
+
     def test_set_gs_binary_posix_format(self):
         """Test setting binary using posix path format works."""
         pygs = P.PyGs({'binary': "/tools/foo/gs.exe"})
@@ -47,23 +52,6 @@ class TestLinux:
         """Test setting binary via config works"""
         pygs = pypdfocr_gs.PyGs({'binary': "/foo/bar/bin/gs"})
         assert pygs.binary == '/foo/bar/bin/gs'
-
-    def test_set_gs_binary_win_format(self):
-        """Test setting binary using posix path format works."""
-        pygs = P.PyGs({'binary': "c:\\tools\\foo\\gs"})
-        assert pygs.binary == os.path.join("tools", "foo", "gs")
-
-
-class TestMockOS:
-    """Tests to run on any platform that mocks the OS"""
-    @pytest.mark.parametrize('os_name, gs_name', [
-        ('posix', 'gs'),
-        ('nt', 'gswin')])
-    def test_find_gs_binary(self, monkeypatch, os_name, gs_name):
-        """Test finding GS exe."""
-        monkeypatch.setattr("os.name", os_name)
-        pygs = P.PyGs({})
-        assert gs_name in pygs.binary
 
 
 class TestGS:
