@@ -6,42 +6,53 @@ import subprocess
 from pypdfocr import pypdfocr_gs as P
 from pypdfocr import pypdfocr_gs
 
-from mock import patch
 import mock
 
 
-class TestGS:
+@pytest.mark.skipif(os.name != 'nt', reason="Not on NT")
+class TestWin:
+    """Tests for when geniunely running on Windows"""
 
-    @pytest.mark.skipif(os.name != 'nt', reason="Not on NT")
-    @patch('os.name')
-    @patch('subprocess.check_output')
-    def test_gs_set_nt(self, mock_subprocess, mock_os_name):
-        """
-            Check that we have a exe on windows
-        """
-        mock_os_name.__str__.return_value = 'nt'
-        p = P.PyGs({})
+    def test_set_gs_binary(self):
+        """Test setting binary via config works"""
+        pygs = P.PyGs({'binary': "C:\\tools\\foo\\gs.exe"})
+        assert pygs.binary == os.path.join("C:\\", "tools", "foo", "gs.exe")
 
-        assert 'gswin' in p.binary
+    def test_find_gs_binary(self):
+        """Test finding GS exe."""
+        pygs = P.PyGs({})
+        assert "gswin" in pygs.binary
 
-    @pytest.mark.skipif(os.name != 'nt', reason="Not on NT")
-    @patch('os.name')
-    @patch('subprocess.call')
-    def test_gs_run_nt(self, mock_subprocess, mock_os_name, caplog):
-        """
-            Stupid test because Windows Tesseract only returns 3.02 instead
-            of 3.02.02
-        """
-        mock_os_name.__str__.return_value = 'nt'
-        p = P.PyGs({})
+    def test_set_gs_binary_posix_format(self):
+        """Test setting binary using posix path format works."""
+        pygs = P.PyGs({'binary': "/tools/foo/gs.exe"})
+        assert pygs.binary == os.path.join("C:\\", "tools", "foo", "gs.exe")
 
-        mock_subprocess.return_value = -1
-        p.binary = 'gsblah.exe'
+    def test_gs_binary_missing(self, monkeypatch, caplog):
+        """Test for when GS is not installed."""
+        monkeypatch.setattr('fnmatch.filter', mock.Mock(return_value=[]))
         with pytest.raises(SystemExit):
-            p._run_gs("", "", "")
+            P.PyGs({})
+        assert any([x for x in caplog.records if x.levelname == "ERROR"])
 
-        assert p.msgs['GS_FAILED'] in caplog.text
+    def test_multiple_gs(self, monkeypatch, caplog):
+        """If multiple version are found, the most recent is returned."""
+        monkeypatch.setattr('fnmatch.filter', mock.Mock(
+            return_value=['gs1.00c.exe', 'gs4.32c.exe', 'gs4.31c.exe']))
+        pygs = P.PyGs({})
+        assert os.path.split(pygs.binary)[-1] == 'gs4.32c.exe"'
 
+
+@pytest.mark.skipif(os.name != 'posix', reason="Not on Linux")
+class TestLinux:
+    """Tests for when genuinely running on Linux/posix."""
+    def test_set_gs_binary(self):
+        """Test setting binary via config works"""
+        pygs = pypdfocr_gs.PyGs({'binary': "/foo/bar/bin/gs"})
+        assert pygs.binary == '/foo/bar/bin/gs'
+
+
+class TestGS:
     @pytest.fixture
     def pygs(self):
         return pypdfocr_gs.PyGs({})
@@ -55,20 +66,17 @@ class TestGS:
         shutil.copytree(assets, test_dir)
         return test_dir
 
+    def test_gs_missing(self, tmpdir, caplog):
+        """Test for when invalid gs binary is found or specified."""
+        pygs = P.PyGs({'binary': str(tmpdir.join('gsblah'))})
+        with pytest.raises(SystemExit):
+            pygs._run_gs("", "", "")
+        assert any([x for x in caplog.records if x.levelname == "ERROR"])
+
     def test_gs_pdf_missing(self, pygs, caplog):
         with pytest.raises(SystemExit):
             pygs.make_img_from_pdf("missing123.pdf")
         assert pygs.msgs['GS_MISSING_PDF'] in caplog.text
-
-    def test_override_binary_nt(self, monkeypatch):
-        monkeypatch.setattr('os.name', 'nt')
-        pygs = pypdfocr_gs.PyGs({'binary': "c:\\foo\\bar\\bin"})
-        assert pygs.binary == '"c:\\\\foo\\\\bar\\\\bin"'
-
-    def test_override_binary_posix(self, monkeypatch):
-        monkeypatch.setattr('os.name', 'posix')
-        pygs = pypdfocr_gs.PyGs({'binary': "/foo/bar/bin/gs"})
-        assert pygs.binary == '/foo/bar/bin/gs'
 
     def test_get_dpi_pdf_missing(self, pygs):
         with pytest.raises(SystemExit):
@@ -77,23 +85,32 @@ class TestGS:
     def test_get_dpi_fail(self, pygs, asset_dir, monkeypatch, caplog):
         monkeypatch.setattr(
             'subprocess.check_output',
-            mock.Mock(side_effect=subprocess.CalledProcessError(returncode=2,
-                                                                cmd=['bad'])))
+            mock.Mock(side_effect=subprocess.CalledProcessError(
+                returncode=2, cmd=['bad'])))
         pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
         assert "not execute" in caplog.text
+
+    def test_imagemagick_failed(self, pygs, asset_dir, monkeypatch, caplog):
+        """Test default DPI is used if imagemagick failes to run."""
+        monkeypatch.setattr(
+            'subprocess.check_output',
+            mock.Mock(side_effect=[
+                "_\n_\n_ _ image 5 5 gray",
+                subprocess.CalledProcessError(returncode=2, cmd=['bad'])]))
+        pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
+        assert "try installing imagemagick" in caplog.text
+        assert pygs.output_dpi == 300
 
     def test_empty_pdf(self, pygs, asset_dir, caplog):
         pygs._get_dpi(os.path.join(asset_dir, "blank.pdf"))
         assert "Empty pdf" in caplog.text
 
     def test_pdfimages_malformed_output(
-        self, pygs, asset_dir, monkeypatch, caplog):
+            self, pygs, asset_dir, monkeypatch, caplog):
         """This isn't a good test - should make a better one"""
         monkeypatch.setattr("subprocess.check_output",
                             mock.Mock(return_value="0\n1\n2 3 None"))
-        """
-        1     0 image    1692  2194  icc     1   8  jpeg   no         8  0   200   201  228K 6.3%
-        """
+        # 1 0 image 1692 2194 icc 1 8 jpeg no 8 0 200 201 228K 6.3%
         pygs._get_dpi(os.path.join(asset_dir, "test_recipe.pdf"))
         assert "Could not understand" in caplog.text
 
@@ -132,6 +149,11 @@ class TestGS:
     def test_functional_make_img(self, pygs, asset_dir):
         out = pygs.make_img_from_pdf(os.path.join(asset_dir, "test.pdf"))
         assert out == (300, os.path.join(asset_dir, "test_*.jpg"))
+
+    def test_functional_greyscale(self, pygs, asset_dir):
+        out = pygs.make_img_from_pdf(
+            os.path.join(asset_dir, "test_sherlock.pdf"))
+        assert out[1] == os.path.join(asset_dir, "test_sherlock_*.jpg")
 
     def test_existing_img(self, pygs, asset_dir):
         """Existing jpg files in folder should be removed."""
