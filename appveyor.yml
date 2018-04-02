@@ -40,7 +40,7 @@ install:
   - ps: $env:Path += ";${binPath}"
   # Install python dependencies
   - "%PYTHON%\\python.exe -m pip install -r requirements.txt"
-  - "%PYTHON%\\python.exe -m pip install pytest mock pytest-catchlog coverage pytest-cov"
+  - "%PYTHON%\\python.exe -m pip install pytest mock coverage pytest-cov"
   - "%PYTHON%\\python.exe -m pip install python-coveralls"
   - "%PYTHON%\\python.exe -m pip install ."
 
@@ -58,7 +58,6 @@ test_script:
   # Note that you must use the environment variable %PYTHON% to refer to
   # the interpreter you're using - Appveyor does not do anything special
   # to put the Python version you want to use on PATH.
-  - "%PYTHON%\\python.exe setup.py test"
   - "%PYTHON%\\python.exe -m pytest test -v --cov pypdfocr --cov-report term-missing"
 
 # after_test:
