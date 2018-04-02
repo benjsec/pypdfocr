@@ -38,19 +38,18 @@ install:
   - ps: $binPath = "${env:ProgramFiles(x86)}\Poppler\"
   - ps: 7z e $zipPath "-o$binPath"
   - ps: $env:Path += ";${binPath}"
+  - ps: $env:Path = "%PYTHON%;%PYTHON%\\Scripts;${env:Path}"
+  - "python --version"
   # Install python dependencies
-  - "%PYTHON%\\python.exe -m pip install -r requirements.txt"
-  - "%PYTHON%\\python.exe -m pip install pytest mock coverage pytest-cov"
-  - "%PYTHON%\\python.exe -m pip install python-coveralls"
-  - "%PYTHON%\\python.exe -m pip install ."
+  - "python -m pip install -r requirements.txt"
+  - "python -m pip install pytest mock coverage pytest-cov"
+  - "python -m pip install python-coveralls"
+  - "python -m pip install ."
 
 
 build: off
 
 test_script:
-  - ps: echo $env:Path
-#  - ps: cmd pdfimages -v
-#  - ps: cmd magick -version
   # Put your test command here.
   # If you don't need to build C extensions on 64-bit Python 3.3 or 3.4,
   # you can remove "build.cmd" from the front of the command, as it's
@@ -58,7 +57,7 @@ test_script:
   # Note that you must use the environment variable %PYTHON% to refer to
   # the interpreter you're using - Appveyor does not do anything special
   # to put the Python version you want to use on PATH.
-  - "%PYTHON%\\python.exe -m pytest test -v --cov pypdfocr --cov-report term-missing"
+  - "python -m pytest test -v --cov pypdfocr --cov-report term-missing"
 
 # after_test:
   # This step builds your wheels.
@@ -71,7 +70,8 @@ test_script:
   # bdist_wheel puts your built wheel in the dist directory
   # - path: dist\*
 
-#on_success:
+on_success:
 #  You can use this step to upload your artifacts to a public website.
 #  See Appveyor's documentation for more details. Or you can simply
 #  access your wheels from the Appveyor "artifacts" tab for your build.
+  - "coveralls"
