@@ -3,8 +3,6 @@ version: 1.0.{build}
 image: Visual Studio 2017
 
 environment:
-
-environment:
   COVERALLS_REPO_TOKEN:  
     secure: FJE5hTnMslsL9Fnh3+LOfaLbs1CC0Uo9EKram7VQa9Dj3YEvo/9noai6KKTmyEdh
 
