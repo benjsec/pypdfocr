@@ -31,7 +31,7 @@ install:
     - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then export PATH="$HOME/miniconda/bin:$PATH"; fi;
     - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then source activate test_env; fi;
     - pip install -r requirements.txt
-    - pip install pytest mock coverage
+    - pip install pytest mock coverage pytest-cov
     - pip install python-coveralls
     - pip install .
 script: 
