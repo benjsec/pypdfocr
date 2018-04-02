@@ -4,6 +4,10 @@ image: Visual Studio 2017
 
 environment:
 
+environment:
+    COVERALLS_REPO_TOKEN:  
+       secure: FJE5hTnMslsL9Fnh3+LOfaLbs1CC0Uo9EKram7VQa9Dj3YEvo/9noai6KKTmyEdh
+
   matrix:
 
     # For Python versions available on Appveyor, see
@@ -39,6 +43,7 @@ install:
   # Install python dependencies
   - "%PYTHON%\\python.exe -m pip install -r requirements.txt"
   - "%PYTHON%\\python.exe -m pip install pytest mock pytest-catchlog"
+  - "%PYTHON%\\python.exe -m pip install python-coveralls"
   - "%PYTHON%\\python.exe -m pip install ."
 
 
@@ -56,6 +61,7 @@ test_script:
   # the interpreter you're using - Appveyor does not do anything special
   # to put the Python version you want to use on PATH.
   - "%PYTHON%\\python.exe setup.py test"
+  - "%PYTHON%\\python.exe -m pytest test --pep8 pypdfocr -v --cov pypdfocr --cov-report term-missing"
 
 # after_test:
   # This step builds your wheels.
