@@ -37,6 +37,6 @@ install:
 script: 
     - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then export PATH="$HOME/miniconda/bin:$PATH"; fi;
     - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then source activate test_env; fi;
-    - pytest test --pep8 pypdfocr -v --cov pypdfocr --cov-report term-missing
+    - pytest test -v --cov pypdfocr --cov-report term-missing
 after_success:
     - coveralls
